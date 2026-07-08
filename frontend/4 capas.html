@@ -1144,8 +1144,175 @@
         }
 
 
-        // Botones de prueba (FASE 2.1) - opcional, no rompe la escena.
+        // ==============================
+        // Controles de simulación de clima (tiempo real / acelerado)
+        // ==============================
+        const simControls = document.createElement('div');
+        simControls.style.position = 'fixed';
+        simControls.style.left = '20px';
+        simControls.style.bottom = '140px';
+        simControls.style.zIndex = '20';
+        simControls.style.display = 'flex';
+        simControls.style.alignItems = 'center';
+        simControls.style.gap = '10px';
+        simControls.style.padding = '10px 12px';
+        simControls.style.background = 'rgba(12,20,12,0.85)';
+        simControls.style.border = '1px solid rgba(255,255,255,0.12)';
+        simControls.style.borderRadius = '12px';
+        simControls.style.color = '#e8efe8';
+        simControls.style.fontFamily = "Space Grotesk, sans-serif";
+        simControls.style.fontWeight = '700';
+        simControls.style.fontSize = '12px';
+        simControls.style.pointerEvents = 'auto';
 
+        const simModeLabel = document.createElement('span');
+        simModeLabel.textContent = 'Clima:';
+        simControls.appendChild(simModeLabel);
+
+        const simModeSelect = document.createElement('select');
+        simModeSelect.style.background = 'rgba(12,20,12,0.75)';
+        simModeSelect.style.color = '#e8efe8';
+        simModeSelect.style.border = '1px solid rgba(255,255,255,0.12)';
+        simModeSelect.style.borderRadius = '8px';
+        simModeSelect.style.padding = '8px 10px';
+        simModeSelect.innerHTML = `
+          <option value="backend" selected>Backend (Supabase)</option>
+          <option value="sim">Simulación local</option>
+        `;
+        simControls.appendChild(simModeSelect);
+
+        const simSpeedLabel = document.createElement('span');
+        simSpeedLabel.textContent = '×';
+        simControls.appendChild(simSpeedLabel);
+
+        const simSpeedSelect = document.createElement('select');
+        simSpeedSelect.style.background = 'rgba(12,20,12,0.75)';
+        simSpeedSelect.style.color = '#e8efe8';
+        simSpeedSelect.style.border = '1px solid rgba(255,255,255,0.12)';
+        simSpeedSelect.style.borderRadius = '8px';
+        simSpeedSelect.style.padding = '8px 10px';
+        simSpeedSelect.innerHTML = `
+          <option value="0">Real time (x1)</option>
+          <option value="1">x1</option>
+          <option value="2">x2</option>
+          <option value="5" selected>x5</option>
+          <option value="10">x10</option>
+
+        `;
+        simControls.appendChild(simSpeedSelect);
+
+        const simClockText = document.createElement('span');
+        simClockText.style.marginLeft = '6px';
+        simClockText.textContent = 'Hora: --:--';
+        simControls.appendChild(simClockText);
+
+        document.body.appendChild(simControls);
+
+        // ==============================
+        // Motor local de “hora virtual + sol” para TEMP/HUM/RIEGO
+        // ==============================
+        // Este motor SOLO se activa si simModeSelect.value === 'sim'.
+        // Cuando está en Backend, se siguen mostrando los valores desde Supabase.
+        let sim = {
+          enabled: false,
+          // hora inicial (se toma del backendAutomation.horaVirtual si existe)
+          minutesOfDay: 18 * 60 + 45,
+          lastRealMs: Date.now(),
+          temp_c: 27,
+          hum_pct: 68,
+          riego: false,
+          // configuración simple (se puede ajustar)
+          tempMin: 14,
+          tempMax: 38,
+          humMin: 45,
+          humMax: 85,
+          // umbrales de riego
+          humRiegoOnBelow: 50,
+          humRiegoOffAbove: 60,
+        };
+
+        function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
+
+        function minutesToHHMM(mins) {
+          const m = ((mins % (24 * 60)) + (24 * 60)) % (24 * 60);
+          const hh = String(Math.floor(m / 60)).padStart(2, '0');
+          const mm = String(m % 60).padStart(2, '0');
+          return `${hh}:${mm}`;
+        }
+
+          // Curva día/noche (más realista): sol máximo alrededor de 13:00
+        // Devuelve factor 0..1.
+        function solarFactor(minutes) {
+          // Queremos proporcionalidad continua y que al volver de 24h a 0
+          // la TEMP arranque a subir gradualmente.
+          // Definimos un ciclo diario sinusoidal centrado alrededor de las 13:00.
+          // f=0 fuera de “ventana solar” y f~1 cerca del pico.
+          const dayMinutes = 24 * 60;
+          const m = ((minutes % dayMinutes) + dayMinutes) % dayMinutes; // 0..1440
+
+          // Pico de radiación (13:00)
+          const peak = 13 * 60;
+          const halfWindow = 6 * 60; // ventana ~6h a cada lado del pico => 7:00..19:00 aprox
+
+          // Normalizamos el ángulo para obtener una campana suave (sinusoidal)
+          const dist = Math.abs(m - peak);
+          const distWrap = Math.min(dist, dayMinutes - dist); // distancia sobre el wrap
+
+          if (distWrap >= halfWindow) return 0;
+
+          // distWrap=0 => 1; distWrap=halfWindow => 0
+          const t = 1 - (distWrap / halfWindow); // 0..1
+          // Campana suave: sin(pi/2 * t) mantiene continuidad
+          return Math.max(0, Math.min(1, Math.sin((Math.PI / 2) * t)));
+        }
+
+
+        // Temperatura ambiente (depende del factor solar) con offset diurno.
+        // Esto evita que el sistema quede “pegado” cerca de humRiegoOnBelow o extremos.
+        function tempFromSolarFactor(f) {
+          // Si f=0 => 14°C, si f=1 => 38°C (proporcional)
+          return sim.tempMin + (sim.tempMax - sim.tempMin) * f;
+        }
+
+        function humFromSolarFactor(f) {
+          // Si hace calor (f alta) => humedad baja
+          return sim.humMax - (sim.humMax - sim.humMin) * f;
+        }
+
+
+        function updateLocalClimate(dtSeconds) {
+          // dtSeconds en “tiempo real”; multiplicamos por factor de velocidad
+          const speedFactor = (() => {
+            const v = Number(simSpeedSelect.value);
+            if (!v) return 1; // real time
+            return v;
+          })();
+
+          sim.minutesOfDay += (dtSeconds * 60) * speedFactor; // 1s real => 1 min simulada * speed
+
+          const f = solarFactor(sim.minutesOfDay); // 0..1
+
+          // TEMP sube con el sol
+          const targetTemp = sim.tempMin + (sim.tempMax - sim.tempMin) * f;
+          // HUM es inversa (cuando más calor/sol, menos humedad)
+          const targetHum = sim.humMax - (sim.humMax - sim.humMin) * f;
+
+          // suavizado para que sea “agradable” visualmente
+          // (subimos k para que sea mucho más evidente en pantalla)
+          const k = 1 - Math.exp(-dtSeconds * 2.2);
+          sim.temp_c = sim.temp_c + (targetTemp - sim.temp_c) * k;
+          sim.hum_pct = sim.hum_pct + (targetHum - sim.hum_pct) * k;
+
+          // riego por umbrales (histeresis)
+          if (!sim.riego && sim.hum_pct < sim.humRiegoOnBelow) sim.riego = true;
+          if (sim.riego && sim.hum_pct > sim.humRiegoOffAbove) sim.riego = false;
+
+          // hora visible (UI) en UI
+          simClockText.textContent = `Hora: ${minutesToHHMM(sim.minutesOfDay)}`;
+        }
+
+        // ==============================
+        // Botones de prueba (FASE 2.1) - opcional, no rompe la escena.
         function crearBotonesPrueba() {
             const panel = document.createElement('div');
             panel.style.position = 'fixed';
@@ -1262,13 +1429,32 @@
             const dt = Math.min(clock.getDelta(), 0.05);
             const elapsed = clock.elapsedTime;
 
-            // Refrescar indicadores Etapa 1 (temperatura/humedad/riego) desde backend
+            // Refrescar indicadores Etapa 1 (temperatura/humedad/riego)
+            // - Si estás en Simulación local, actualizamos con el motor local
+            // - Si estás en Backend, usamos lo que viene de Supabase
+
+            if (simModeSelect.value === 'sim') {
+                updateLocalClimate(dt);
+                // inyectamos al render como si vinieran del backend
+                backendDevices.temperatura_c = sim.temp_c;
+                backendDevices.humedad_pct = sim.hum_pct;
+                backendDevices.riego = sim.riego;
+            }
+
+            // Importante: mantener hora virtual visible incluso en modo sim
+            if (simModeSelect.value === 'sim' && simClockText) {
+                simClockText.textContent = `Hora: ${minutesToHHMM(sim.minutesOfDay)}`;
+            }
+
             if (thermometer?.tempText) {
-
-
-                if (typeof backendDevices.temperatura_c === 'number') {
+                // Si estamos en simulación local, priorizamos sim.temp_c.
+                // (evita que el polling de Supabase “pise” el valor constante)
+                if (simModeSelect.value === 'sim') {
+                    tempNow = sim.temp_c;
+                } else if (typeof backendDevices.temperatura_c === 'number') {
                     tempNow = backendDevices.temperatura_c;
                 }
+
 
                 // Re-render del texto en textura (createLabel genera un CanvasTexture; aquí actualizamos por recreación)
                 // Para evitar complejidad de canvas, recreamos el mesh del label.
@@ -1280,9 +1466,13 @@
             }
 
             if (humidityBar?.frame && humidityBar?.fill && humidityText?.mesh) {
-                if (typeof backendDevices.humedad_pct === 'number') {
+                // En simulación local, priorizamos el valor del motor local
+                if (simModeSelect.value === 'sim') {
+                    humNow = sim.hum_pct;
+                } else if (typeof backendDevices.humedad_pct === 'number') {
                     humNow = backendDevices.humedad_pct;
                 }
+
 
                 const hum = Math.max(0, Math.min(100, humNow));
 
@@ -1305,7 +1495,9 @@
             }
 
             if (riegoIndicator) {
-                const riegoOn = !!backendDevices.riego;
+                // En simulación local, riego viene del motor local.
+                const riegoOn = (simModeSelect.value === 'sim') ? !!sim.riego : !!backendDevices.riego;
+
                 const text = riegoOn ? 'RIEGO: ON' : 'RIEGO: OFF';
                 const color = riegoOn ? '#00e676' : '#66ccff';
 
