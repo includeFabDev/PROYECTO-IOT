@@ -1,10 +1,13 @@
 import express from 'express';
 import cors from 'cors';
 import { env } from './config/env.js';
+
 import { getSupabaseClient } from './services/supabaseClient.js';
 import { stateRoute } from './routes/state.js';
 import { telegramWebhookRoute } from './routes/telegram.js';
 import { ensureDeviceState } from './services/deviceStates.js';
+import { actionRoute } from './routes/action.js';
+
 
 export function createApp() {
   const app = express();
@@ -22,6 +25,8 @@ export function createApp() {
   }));
 
   app.post('/api/telegram-webhook', awaitableHandler(telegramWebhookRoute(supabase)));
+  app.post('/api/action', awaitableHandler(actionRoute(supabase)));
+
 
   // helper local
   function awaitableHandler(fn) {

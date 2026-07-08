@@ -541,9 +541,69 @@
         roofLines.rotation.y = Math.PI / 4;
         physicalGroup.add(roofLines);
 
-        /* Sensor de temperatura */
+       /* Sensor de temperatura */
         const sensorGroup = new THREE.Group();
+
+        // Elementos visuales de Etapa 1 (termómetro/humedad)
+        const tempText = createLabel('TEMP: --°C', '#ffab00', 0.7);
+        tempText.position.set(-2.25, 3.8, 0);
+        physicalGroup.add(tempText);
+
+        const humidityTextMesh = createLabel('HUM: --%', '#00e676', 0.7);
+        humidityTextMesh.position.set(2.25, 3.8, 0);
+        physicalGroup.add(humidityTextMesh);
+
+
+        // Barra de humedad (relleno cambia con humNow)
+        const humBarFrame = new THREE.Mesh(
+            new THREE.BoxGeometry(0.18, 0.85, 0.06),
+            new THREE.MeshStandardMaterial({ color: 0x263238, metalness: 0.2, roughness: 0.6 })
+        );
+        humBarFrame.position.set(2.05, 3.0, 0.02);
+        physicalGroup.add(humBarFrame);
+
+        const humBarFill = new THREE.Mesh(
+            new THREE.BoxGeometry(0.14, 0.8, 0.04),
+            new THREE.MeshStandardMaterial({ color: 0x00e676, transparent: true, opacity: 0.85 })
+        );
+        humBarFill.position.set(2.05, 3.0 - 0.4, 0.021);
+        physicalGroup.add(humBarFill);
+
+        // Indicador de riego
+        const riegoTextMesh = createLabel('RIEGO: OFF', '#66ccff', 0.7);
+        riegoTextMesh.position.set(0, 4.55, -2.2);
+        physicalGroup.add(riegoTextMesh);
+
+        // 💧 Animación de riego (gotas azules bajando)
+        const riegoDrops = [];
+        const RIEGO_DROPS = 60;
+        for (let i = 0; i < RIEGO_DROPS; i++) {
+            const drop = new THREE.Mesh(
+                new THREE.SphereGeometry(Math.max(eps, 0.03), 10, 10),
+                new THREE.MeshBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.0, depthWrite: false })
+            );
+            // Caen cerca del centro del invernadero
+            drop.position.set((Math.random() - 0.5) * 3.0, 4.2 + Math.random() * 0.6, (Math.random() - 0.5) * 3.0);
+            drop.userData.speed = 0.6 + Math.random() * 1.0;
+            drop.userData.phase = Math.random() * Math.PI * 2;
+            riegoDrops.push(drop);
+            physicalGroup.add(drop);
+        }
+
+
+        // Variables globales del sistema de sensores (deben existir ANTES de usarse)
+        let thermometer = null;
+        let humidityBar = null;
+        let humidityText = null;
+        let riegoIndicator = null;
+
+        thermometer = { tempText };
+        humidityBar = { frame: humBarFrame, fill: humBarFill };
+        humidityText = { mesh: humidityTextMesh };
+        riegoIndicator = riegoTextMesh;
+
         const sensorPost = new THREE.Mesh(
+
             new THREE.CylinderGeometry(0.06, 0.06, 1.2, 8),
             new THREE.MeshStandardMaterial({ color: 0x607d8b, metalness: 0.7 })
         );
@@ -1046,6 +1106,18 @@
 
         // Debug HUD (para demo): muestra el estado que está leyendo el frontend
         const debugHud = document.createElement('div');
+
+        // Sensores y actuadores (Etapa 1)
+        let backendSensors = { temperatura_c: 27, humedad_pct: 68 };
+        let backendAutomation = { modoAutomatico: true, horaVirtual: '18:45' };
+
+
+
+        // Estado actual de sensores (para animación en el render)
+        let tempNow = 27;
+        let humNow = 68;
+
+
         debugHud.style.position = 'fixed';
         debugHud.style.left = '20px';
         debugHud.style.top = '70px';
@@ -1062,8 +1134,18 @@
         debugHud.textContent = 'HUD: conectando...';
         document.body.appendChild(debugHud);
 
+        // Inicial: actualiza HUD con todos los estados que existan
+        function renderHud() {
+            const d = backendDevices || {};
+            const t = typeof d.temperatura_c === 'number' ? `${d.temperatura_c.toFixed(0)}°C` : '--';
+            const h = typeof d.humedad_pct === 'number' ? `${d.humedad_pct.toFixed(0)}%` : '--';
+            const riego = d.riego ? 'ON' : 'OFF';
+            debugHud.textContent = `HUD | Luz:${d.luz ? 'ON' : 'OFF'} Aire:${d.aire ? 'ON' : 'OFF'} Temp:${t} Hum:${h} Riego:${riego}`;
+        }
+
 
         // Botones de prueba (FASE 2.1) - opcional, no rompe la escena.
+
         function crearBotonesPrueba() {
             const panel = document.createElement('div');
             panel.style.position = 'fixed';
@@ -1107,8 +1189,24 @@
             panel.appendChild(mkBtn('💡 Toggle luz', () => postToggle('luz')));
             panel.appendChild(mkBtn('❄️ Toggle aire', () => postToggle('aire')));
 
+            // 🌡️🔥 Temperatura / 💧 Humedad / 💦 Riego (demo sin Telegram)
+            const postAction = async (device, mode) => {
+                // manda directamente al backend: POST /api/action
+                // mode: 'on' | 'off'
+                await fetch('http://localhost:3000/api/action', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chatId: CHAT_ID, device, mode })
+                }).catch(() => {});
+            };
+
+            panel.appendChild(mkBtn('🌡️🔥 Activar calor', () => postAction('temperatura_c', 'on')));
+            panel.appendChild(mkBtn('🌵 Activar sequedad', () => postAction('humedad_pct', 'on')));
+            panel.appendChild(mkBtn('💦 Activar riego', () => postAction('riego', 'on')));
+
             document.body.appendChild(panel);
         }
+
 
         crearBotonesPrueba();
 
@@ -1121,10 +1219,16 @@
             if (data?.devices) {
                     backendDevices = {
                         luz: !!data.devices.luz,
-                        aire: !!data.devices.aire
+                        aire: !!data.devices.aire,
+                        riego: !!data.devices.riego,
+                        temperatura_c: typeof data.devices.temperatura_c === 'number' ? data.devices.temperatura_c : 27,
+                        humedad_pct: typeof data.devices.humedad_pct === 'number' ? data.devices.humedad_pct : 68,
+                        modoAutomatico: !!data.devices.modoAutomatico,
+                        horaVirtual: data.devices.horaVirtual || '18:45'
                     };
                     console.log("[HTML] backendDevices updated:", backendDevices, "raw:", data);
-                    if (debugHud) debugHud.textContent = `HUD: luz=${backendDevices.luz} aire=${backendDevices.aire}`;
+                    if (debugHud) renderHud();
+
                 }
             } catch (e) {
                 // si falla el backend, dejamos el último estado (no rompemos la escena)
@@ -1157,6 +1261,86 @@
             requestAnimationFrame(animate);
             const dt = Math.min(clock.getDelta(), 0.05);
             const elapsed = clock.elapsedTime;
+
+            // Refrescar indicadores Etapa 1 (temperatura/humedad/riego) desde backend
+            if (thermometer?.tempText) {
+
+
+                if (typeof backendDevices.temperatura_c === 'number') {
+                    tempNow = backendDevices.temperatura_c;
+                }
+
+                // Re-render del texto en textura (createLabel genera un CanvasTexture; aquí actualizamos por recreación)
+                // Para evitar complejidad de canvas, recreamos el mesh del label.
+                const newTempText = createLabel(`TEMP: ${tempNow.toFixed(0)}°C`, '#ffab00', 0.7);
+                newTempText.position.copy(thermometer.tempText.position);
+                physicalGroup.remove(thermometer.tempText);
+                physicalGroup.add(newTempText);
+                thermometer.tempText = newTempText;
+            }
+
+            if (humidityBar?.frame && humidityBar?.fill && humidityText?.mesh) {
+                if (typeof backendDevices.humedad_pct === 'number') {
+                    humNow = backendDevices.humedad_pct;
+                }
+
+                const hum = Math.max(0, Math.min(100, humNow));
+
+                // Actualizar barra: mapeamos 0..100 a escala Y 0..1 aprox.
+                const maxY = 0.8;
+                const scale = hum / 100;
+                humidityBar.fill.scale.y = Math.max(0.02, scale);
+
+                // Reubicar el fill para que crezca desde abajo
+                const frameTopY = humidityBar.frame.position.y + (0.85 / 2);
+                const fillHeight = 0.8 * humidityBar.fill.scale.y;
+                humidityBar.fill.position.y = frameTopY - (fillHeight / 2) - 0.42;
+
+                // Actualizar texto
+                const newHumText = createLabel(`HUM: ${hum.toFixed(0)}%`, '#00e676', 0.7);
+                newHumText.position.copy(humidityText.mesh.position);
+                physicalGroup.remove(humidityText.mesh);
+                physicalGroup.add(newHumText);
+                humidityText.mesh = newHumText;
+            }
+
+            if (riegoIndicator) {
+                const riegoOn = !!backendDevices.riego;
+                const text = riegoOn ? 'RIEGO: ON' : 'RIEGO: OFF';
+                const color = riegoOn ? '#00e676' : '#66ccff';
+
+                if (riegoIndicator.userData._lastText !== text) {
+                    riegoIndicator.userData._lastText = text;
+                    const newRiego = createLabel(text, color, 0.7);
+                    newRiego.position.copy(riegoIndicator.position);
+                    physicalGroup.remove(riegoIndicator);
+                    physicalGroup.add(newRiego);
+                    riegoIndicator = newRiego;
+                }
+
+                // Animación de gotas cuando riego está ON
+                if (Array.isArray(riegoDrops) && riegoDrops.length) {
+                    riegoDrops.forEach((drop, i) => {
+                        if (riegoOn) {
+                            drop.material.opacity = 0.15 + 0.65 * (0.5 + 0.5 * Math.sin(elapsed * 10 + i));
+                            drop.position.y -= drop.userData.speed * dt;
+                            drop.position.x += Math.sin(elapsed * 2 + i) * 0.002;
+
+                            if (drop.position.y < 3.2) {
+                                drop.position.y = 4.2 + Math.random() * 0.6;
+                                drop.position.x = (Math.random() - 0.5) * 3.0;
+                                drop.position.z = (Math.random() - 0.5) * 3.0;
+                            }
+                        } else {
+                            drop.material.opacity = 0.0;
+                            drop.position.y = 4.2 + Math.random() * 0.6;
+                        }
+                    });
+                }
+            }
+
+
+
 
             /* Tween de cámara */
             updateCameraTween(dt);

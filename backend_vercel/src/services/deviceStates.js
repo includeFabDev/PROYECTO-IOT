@@ -1,4 +1,12 @@
-const DEFAULT_STATE = { luz: false, aire: false };
+const DEFAULT_STATE = {
+  luz: false,
+  aire: false,
+  riego: false,
+  temperatura_c: 27,
+  humedad_pct: 68,
+  modoAutomatico: true,
+  horaVirtual: '18:45'
+};
 
 export function getDefaultState() {
   return { ...DEFAULT_STATE };

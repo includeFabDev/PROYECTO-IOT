@@ -1,3 +1,5 @@
+import { getDefaultState } from '../services/deviceStates.js';
+
 export function stateRoute(supabase) {
   return async function stateHandler(req, res) {
     try {
@@ -21,8 +23,18 @@ export function stateRoute(supabase) {
         });
       }
 
+      const merged = { ...getDefaultState(), ...(data.state || {}) };
+
       return res.json({
-        devices: { luz: !!data.state?.luz, aire: !!data.state?.aire },
+        devices: {
+          luz: !!merged.luz,
+          aire: !!merged.aire,
+          riego: !!merged.riego,
+          temperatura_c: merged.temperatura_c,
+          humedad_pct: merged.humedad_pct,
+          modoAutomatico: !!merged.modoAutomatico,
+          horaVirtual: merged.horaVirtual
+        },
         lastAction: data.last_action,
         updatedAt: data.updated_at
       });
