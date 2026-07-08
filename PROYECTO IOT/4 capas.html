@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Capas IoT - Invernadero Inteligente</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        :root {
+            --physical: #2ecc71;
+            --connectivity: #00bcd4;
+            --platform: #90a4ae;
+            --application: #ff9800;
+            --bg: #070b07;
+            --card: rgba(12, 20, 12, 0.75);
+            --border: rgba(255,255,255,0.07);
+            --fg: #e8efe8;
+            --muted: #7a8a7a;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: var(--bg);
+            color: var(--fg);
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+        #canvas-container {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+        }
+        #canvas-container canvas { display: block; }
+        .vignette {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 1;
+            background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.6) 100%);
+        }
+
+        /* Header */
+        .top-bar {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 10;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: linear-gradient(to bottom, rgba(7,11,7,0.9) 0%, transparent 100%);
+            pointer-events: none;
+        }
+        .top-bar .dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: var(--physical);
+            box-shadow: 0 0 8px var(--physical);
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+        @keyframes pulse-dot {
+            0%,100% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.3); }
+        }
+
+        /* Info Panel */
+        .info-panel {
+            position: fixed;
+            top: 70px; right: 20px;
+            width: 360px;
+            max-height: calc(100vh - 160px);
+            z-index: 10;
+            background: var(--card);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px 24px;
+            transition: opacity 0.4s, transform 0.4s;
+            overflow-y: auto;
+        }
+        .info-panel.hidden {
+            opacity: 0;
+            transform: translateX(30px);
+            pointer-events: none;
+        }
+        .info-panel .layer-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-bottom: 16px;
+        }
+        .info-panel h2 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            line-height: 1.2;
+        }
+        .info-panel p {
+            font-size: 14.5px;
+            line-height: 1.7;
+            color: var(--muted);
+            margin-bottom: 20px;
+        }
+        .info-panel .elements-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .info-panel .elements-list li {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            font-size: 13.5px;
+            color: #b0c0b0;
+            line-height: 1.5;
+        }
+        .info-panel .elements-list li i {
+            margin-top: 3px;
+            font-size: 11px;
+            flex-shrink: 0;
+        }
+
+        /* Navigation */
+        .nav-bar {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            display: flex;
+            gap: 6px;
+            padding: 6px;
+            background: var(--card);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+        }
+        .nav-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 12px;
+            background: transparent;
+            color: var(--muted);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+        .nav-btn i { font-size: 16px; transition: color 0.3s, transform 0.3s; }
+        .nav-btn:hover { color: var(--fg); background: rgba(255,255,255,0.04); }
+        .nav-btn:hover i { transform: scale(1.15); }
+        .nav-btn.active { color: var(--fg); background: rgba(255,255,255,0.08); }
+        .nav-btn .indicator {
+            width: 4px; height: 4px;
+            border-radius: 50%;
+            background: transparent;
+            transition: background 0.3s;
+            position: absolute;
+            bottom: 6px;
+        }
+
+        /* Loading */
+        .loading-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            background: var(--bg);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            transition: opacity 0.8s;
+        }
+        .loading-screen.fade-out { opacity: 0; pointer-events: none; }
+        .loader {
+            width: 40px; height: 40px;
+            border: 3px solid rgba(46,204,113,0.15);
+            border-top-color: var(--physical);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .info-panel {
+                width: calc(100% - 32px);
+                right: 16px;
+                top: auto;
+                bottom: 90px;
+                max-height: 35vh;
+                padding: 20px 18px;
+            }
+            .nav-btn { padding: 8px 10px; font-size: 10px; }
+            .nav-btn i { font-size: 14px; }
+        }
+
+        /* Scrollbar */
+        .info-panel::-webkit-scrollbar { width: 4px; }
+        .info-panel::-webkit-scrollbar-track { background: transparent; }
+        .info-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+    </style>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+</head>
+<body>
+
+    <!-- Pantalla de carga -->
+    <div class="loading-screen" id="loading">
+        <div class="loader"></div>
+        <span style="font-size:13px; color:var(--muted); letter-spacing:1px;">CARGANDO ESCENA 3D</span>
+    </div>
+
+    <!-- Viñeta -->
+    <div class="vignette"></div>
+
+    <!-- Contenedor del canvas -->
+    <div id="canvas-container"></div>
+
+    <!-- Barra superior -->
+    <header class="top-bar">
+        <div class="dot"></div>
+        <span style="font-size:14px; font-weight:600; letter-spacing:0.5px;">Arquitectura IoT</span>
+        <span style="font-size:12px; color:var(--muted); margin-left:4px;">/ Invernadero Inteligente</span>
+    </header>
+
+    <!-- Panel de información -->
+    <aside class="info-panel hidden" id="infoPanel">
+        <div class="layer-badge" id="layerBadge">CAPA 1</div>
+        <h2 id="layerTitle">Titulo</h2>
+        <p id="layerDesc">Descripción</p>
+        <ul class="elements-list" id="layerElements"></ul>
+    </aside>
+
+    <!-- Navegación -->
+    <nav class="nav-bar" id="navBar">
+        <button class="nav-btn active" data-layer="overview" aria-label="Vista general">
+            <i class="fa-solid fa-layer-group"></i>
+            <span>General</span>
+        </button>
+        <button class="nav-btn" data-layer="physical" aria-label="Capa física">
+            <i class="fa-solid fa-microchip"></i>
+            <span>Física</span>
+        </button>
+        <button class="nav-btn" data-layer="connectivity" aria-label="Conectividad">
+            <i class="fa-solid fa-wifi"></i>
+            <span>Conectividad</span>
+        </button>
+        <button class="nav-btn" data-layer="platform" aria-label="Plataforma">
+            <i class="fa-solid fa-server"></i>
+            <span>Plataforma</span>
+        </button>
+        <button class="nav-btn" data-layer="application" aria-label="Aplicación">
+            <i class="fa-solid fa-mobile-screen-button"></i>
+            <span>Aplicación</span>
+        </button>
+    </nav>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+        /* ==============================
+           DATOS DE CADA CAPA
+        ============================== */
+        const layerData = {
+            overview: {
+                badge: 'VISTA GENERAL',
+                badgeColor: '#e0e0e0',
+                badgeBg: 'rgba(224,224,224,0.1)',
+                title: 'Las 4 Capas de un Sistema IoT',
+                desc: 'Un sistema IoT funciona como una torre de procesamiento de información. Cada capa tiene una responsabilidad específica: captar datos del mundo real, transmitirlos, procesarlos y actuar en consecuencia. Navega entre las capas para ver qué sucede en cada una.',
+                elements: [
+                    { icon: 'fa-solid fa-arrow-up', color: 'var(--physical)', text: 'Datos suben desde el sensor hacia la nube' },
+                    { icon: 'fa-solid fa-arrow-down', color: 'var(--application)', text: 'Órdenes bajan desde la nube hacia los actuadores' },
+                    { icon: 'fa-solid fa-circle-nodes', color: 'var(--connectivity)', text: 'Cada capa se comunica con la anterior y la siguiente' },
+                ]
+            },
+            physical: {
+                badge: 'CAPA 1 — FÍSICA',
+                badgeColor: 'var(--physical)',
+                badgeBg: 'rgba(46,204,113,0.1)',
+                title: 'Sensor de Temperatura en el Invernadero',
+                desc: 'Dentro del invernadero, un sensor de temperatura detecta que la temperatura ha subido a 38°C, superando el umbral seguro de 35°C. El sensor convierte la señal analógica del termistor a un valor digital que puede ser transmitido. Este es el punto de contacto entre el mundo físico y el mundo digital.',
+                elements: [
+                    { icon: 'fa-solid fa-temperature-high', color: 'var(--physical)', text: 'Termistor mide la temperatura ambiente continua' },
+                    { icon: 'fa-solid fa-microchip', color: 'var(--physical)', text: 'ADC convierte la señal analógica a digital' },
+                    { icon: 'fa-solid fa-leaf', color: 'var(--physical)', text: 'Plantas de tomate necesitan temperatura controlada' },
+                    { icon: 'fa-solid fa-bolt', color: 'var(--physical)', text: 'Alimentación por batería con panel solar' },
+                ]
+            },
+            connectivity: {
+                badge: 'CAPA 2 — CONECTIVIDAD',
+                badgeColor: 'var(--connectivity)',
+                badgeBg: 'rgba(0,188,212,0.1)',
+                title: 'Transmisión Wi-Fi del Dato',
+                desc: 'El dato digital (38°C) viaja codificado a través de ondas de radio Wi-Fi (2.4 GHz) desde el módulo del sensor hasta el router del invernadero. Desde ahí, por fibra óptica o 4G, llega al servidor en la nube. La conectividad es el puente que hace posible que la información cruce distancias en milisegundos.',
+                elements: [
+                    { icon: 'fa-solid fa-wifi', color: 'var(--connectivity)', text: 'Módulo ESP32 emite paquetes Wi-Fi' },
+                    { icon: 'fa-solid fa-tower-broadcast', color: 'var(--connectivity)', text: 'Router del invernadero recibe y reenvía' },
+                    { icon: 'fa-solid fa-shield-halved', color: 'var(--connectivity)', text: 'Cifrado WPA3 protege los datos en tránsito' },
+                    { icon: 'fa-solid fa-clock', color: 'var(--connectivity)', text: 'Latencia típica: 15-50 milisegundos' },
+                ]
+            },
+            platform: {
+                badge: 'CAPA 3 — PLATAFORMA',
+                badgeColor: 'var(--platform)',
+                badgeBg: 'rgba(144,164,174,0.1)',
+                title: 'Servidor Cloud Procesando el Dato',
+                desc: 'El servidor en la nube recibe el dato, lo almacena en una base de datos temporal y lo compara con las reglas configuradas: "Si temperatura > 35°C entonces activar alerta y encender extractor". La plataforma es el cerebro del sistema: analiza, decide y coordina las respuestas automáticas.',
+                elements: [
+                    { icon: 'fa-solid fa-database', color: 'var(--platform)', text: 'Base de datos registra historial de temperaturas' },
+                    { icon: 'fa-solid fa-code-branch', color: 'var(--platform)', text: 'Motor de reglas evalúa condiciones en tiempo real' },
+                    { icon: 'fa-solid fa-diagram-project', color: 'var(--platform)', text: 'API REST expone servicios a la capa de aplicación' },
+                    { icon: 'fa-solid fa-gauge-high', color: 'var(--platform)', text: 'Procesamiento: menos de 100ms desde recepción a decisión' },
+                ]
+            },
+            application: {
+                badge: 'CAPA 4 — APLICACIÓN',
+                badgeColor: 'var(--application)',
+                badgeBg: 'rgba(255,152,0,0.1)',
+                title: 'Alerta al Encargado y Activación del Extractor',
+                desc: 'La plataforma envía dos respuestas simultáneas: una notificación push al teléfono del encargado mostrando "Alerta: Temperatura alta 38°C en Invernadero 3", y una señal de control al relé que enciende el extractor de aire. El encargado también puede verificar el estado en tiempo real desde la app.',
+                elements: [
+                    { icon: 'fa-solid fa-bell', color: 'var(--application)', text: 'Notificación push al teléfono del encargado' },
+                    { icon: 'fa-solid fa-fan', color: 'var(--application)', text: 'Señal al relé que activa el extractor de aire' },
+                    { icon: 'fa-solid fa-chart-line', color: 'var(--application)', text: 'Dashboard muestra gráfica de temperatura en vivo' },
+                    { icon: 'fa-solid fa-hand-pointer', color: 'var(--application)', text: 'El encargado puede tomar control manual si lo desea' },
+                ]
+            }
+        };
+
+        /* ==============================
+           CONFIGURACIÓN DE CÁMARA POR CAPA
+        ============================== */
+        const cameraViews = {
+            overview:     { pos: [26, 13, 26], target: [0, 11, 0] },
+            physical:     { pos: [13, 2.5, 13], target: [0, 1.8, 0] },
+            connectivity: { pos: [12, 8.5, 12], target: [0, 8, 0] },
+            platform:     { pos: [14, 15, 14], target: [0, 14.5, 0] },
+            application:  { pos: [12, 21.5, 12], target: [0, 21, 0] },
+        };
+
+        /* ==============================
+           ESCENA, CÁMARA, RENDERER
+        ============================== */
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x070b07);
+        scene.fog = new THREE.FogExp2(0x070b07, 0.012);
+
+        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
+        camera.position.set(26, 13, 26);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.1;
+        container.appendChild(renderer.domElement);
+
+        /* Controles orbitales */
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, 11, 0);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.06;
+        controls.maxDistance = 60;
+        controls.minDistance = 5;
+        controls.update();
+
+        /* Post-procesado: Bloom */
+        const composer = new EffectComposer(renderer);
+        composer.addPass(new RenderPass(scene, camera));
+        const bloomPass = new UnrealBloomPass(
+            new THREE.Vector2(window.innerWidth, window.innerHeight),
+            0.7, 0.4, 0.72
+        );
+        composer.addPass(bloomPass);
+
+        /* ==============================
+           ILUMINACIÓN
+        ============================== */
+        const ambientLight = new THREE.AmbientLight(0x1a2a1a, 0.8);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xd4e8d0, 0.6);
+        dirLight.position.set(10, 25, 8);
+        scene.add(dirLight);
+
+        /* Luces puntuales para cada capa */
+        const lightPhysical = new THREE.PointLight(0x2ecc71, 1.5, 15);
+        lightPhysical.position.set(0, 3, 0);
+        scene.add(lightPhysical);
+
+        const lightConnectivity = new THREE.PointLight(0x00bcd4, 1.2, 15);
+        lightConnectivity.position.set(0, 8, 0);
+        scene.add(lightConnectivity);
+
+        const lightPlatform = new THREE.PointLight(0x90a4ae, 1.0, 15);
+        lightPlatform.position.set(0, 14.5, 0);
+        scene.add(lightPlatform);
+
+        const lightApplication = new THREE.PointLight(0xff9800, 1.2, 15);
+        lightApplication.position.set(0, 21, 0);
+        scene.add(lightApplication);
+
+        /* ==============================
+           UTILIDADES
+        ============================== */
+        const eps = 0.001;
+
+        /* Crear texto como textura en un plano 3D */
+        function createLabel(text, color, size = 1.2) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 96;
+            const ctx = canvas.getContext('2d');
+            ctx.font = `600 ${size * 36}px Space Grotesk, sans-serif`;
+            ctx.fillStyle = color;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, 256, 48);
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.minFilter = THREE.LinearFilter;
+            const mat = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false });
+            const mesh = new THREE.Mesh(new THREE.PlaneGeometry(size * 4, size * 0.75), mat);
+            return mesh;
+        }
+
+        /* Crear plataforma circular semitransparente */
+        function createPlatform(y, color, radius = 7) {
+            const group = new THREE.Group();
+            const r = Math.max(eps, radius);
+            /* Disco */
+            const discGeo = new THREE.CylinderGeometry(r, r, 0.04, 64);
+            const discMat = new THREE.MeshStandardMaterial({
+                color: color, transparent: true, opacity: 0.06,
+                emissive: color, emissiveIntensity: 0.15
+            });
+            const disc = new THREE.Mesh(discGeo, discMat);
+            disc.position.y = y;
+            group.add(disc);
+            /* Anillo de borde */
+            const ringGeo = new THREE.TorusGeometry(r, 0.025, 8, 96);
+            const ringMat = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.35 });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.position.y = y;
+            ring.rotation.x = Math.PI / 2;
+            group.add(ring);
+            return group;
+        }
+
+        /* ==============================
+           CAPA FÍSICA — INVERNADERO
+        ============================== */
+        const physicalGroup = new THREE.Group();
+        physicalGroup.position.y = 0;
+
+        /* Suelo del invernadero */
+        const soilGeo = new THREE.BoxGeometry(7, 0.15, 5);
+        const soilMat = new THREE.MeshStandardMaterial({ color: 0x4e342e, roughness: 1.0 });
+        const soil = new THREE.Mesh(soilGeo, soilMat);
+        soil.position.y = 0.075;
+        physicalGroup.add(soil);
+
+        /* Estructura de alambre (bordes verdes) */
+        const ghBoxGeo = new THREE.BoxGeometry(7, 3.5, 5);
+        const ghEdges = new THREE.EdgesGeometry(ghBoxGeo);
+        const ghLineMat = new THREE.LineBasicMaterial({ color: 0x2ecc71, transparent: true, opacity: 0.7 });
+        const ghWireframe = new THREE.LineSegments(ghEdges, ghLineMat);
+        ghWireframe.position.y = 1.925;
+        physicalGroup.add(ghWireframe);
+
+        /* Paneles de vidrio */
+        const glassMat = new THREE.MeshPhysicalMaterial({
+            color: 0xa5d6a7, transparent: true, opacity: 0.08,
+            roughness: 0.05, metalness: 0.0, side: THREE.DoubleSide
+        });
+        /* Frente y detrás */
+        const fbGeo = new THREE.PlaneGeometry(7, 3.5);
+        const frontGlass = new THREE.Mesh(fbGeo, glassMat);
+        frontGlass.position.set(0, 1.925, 2.5);
+        physicalGroup.add(frontGlass);
+        const backGlass = new THREE.Mesh(fbGeo, glassMat);
+        backGlass.position.set(0, 1.925, -2.5);
+        physicalGroup.add(backGlass);
+        /* Lados */
+        const sideGeo = new THREE.PlaneGeometry(5, 3.5);
+        const leftGlass = new THREE.Mesh(sideGeo, glassMat);
+        leftGlass.position.set(-3.5, 1.925, 0);
+        leftGlass.rotation.y = Math.PI / 2;
+        physicalGroup.add(leftGlass);
+        const rightGlass = new THREE.Mesh(sideGeo, glassMat);
+        rightGlass.position.set(3.5, 1.925, 0);
+        rightGlass.rotation.y = Math.PI / 2;
+        physicalGroup.add(rightGlass);
+
+        /* Techo piramidal */
+        const roofGeo = new THREE.ConeGeometry(Math.max(eps, 5), 1.8, 4);
+        const roofMat = new THREE.MeshPhysicalMaterial({
+            color: 0xc8e6c9, transparent: true, opacity: 0.1,
+            roughness: 0.05, side: THREE.DoubleSide
+        });
+        const roof = new THREE.Mesh(roofGeo, roofMat);
+        roof.position.y = 4.575;
+        roof.rotation.y = Math.PI / 4;
+        physicalGroup.add(roof);
+
+        /* Bordes del techo */
+        const roofEdges = new THREE.EdgesGeometry(roofGeo);
+        const roofLines = new THREE.LineSegments(roofEdges, new THREE.LineBasicMaterial({ color: 0x2ecc71, transparent: true, opacity: 0.5 }));
+        roofLines.position.y = 4.575;
+        roofLines.rotation.y = Math.PI / 4;
+        physicalGroup.add(roofLines);
+
+        /* Sensor de temperatura */
+        const sensorGroup = new THREE.Group();
+        const sensorPost = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.06, 0.06, 1.2, 8),
+            new THREE.MeshStandardMaterial({ color: 0x607d8b, metalness: 0.7 })
+        );
+        sensorPost.position.y = 0.75;
+        sensorGroup.add(sensorPost);
+        const sensorBody = new THREE.Mesh(
+            new THREE.BoxGeometry(0.35, 0.25, 0.2),
+            new THREE.MeshStandardMaterial({ color: 0x37474f, metalness: 0.5 })
+        );
+        sensorBody.position.y = 1.45;
+        sensorGroup.add(sensorBody);
+        /* Indicador LED rojo */
+        const sensorLed = new THREE.Mesh(
+            new THREE.SphereGeometry(Math.max(eps, 0.06), 12, 12),
+            new THREE.MeshBasicMaterial({ color: 0xff1744 })
+        );
+        sensorLed.position.set(0.12, 1.52, 0.1);
+        sensorGroup.add(sensorLed);
+        sensorGroup.position.set(-1.5, 0, 0);
+        physicalGroup.add(sensorGroup);
+
+        /* Plantas (conos verdes simples) */
+        const plantPositions = [[-2.5, 0.15, -1.5], [-2, 0.15, 1], [1.5, 0.15, -1.8], [2.5, 0.15, 0.5], [0, 0.15, -2], [2, 0.15, 1.8]];
+        plantPositions.forEach(([px, py, pz], i) => {
+            const h = 0.5 + Math.random() * 0.5;
+            const plant = new THREE.Mesh(
+                new THREE.ConeGeometry(Math.max(eps, 0.2 + Math.random() * 0.15), h, 8),
+                new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(0.3 + Math.random() * 0.05, 0.6, 0.25 + Math.random() * 0.1) })
+            );
+            plant.position.set(px, py + h / 2, pz);
+            physicalGroup.add(plant);
+            /* Tallo */
+            const stem = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.02, 0.02, h * 0.6, 6),
+                new THREE.MeshStandardMaterial({ color: 0x33691e })
+            );
+            stem.position.set(px, py + h * 0.3, pz);
+            physicalGroup.add(stem);
+        });
+
+        /* Partículas de calor dentro del invernadero */
+        const heatParticles = [];
+        for (let i = 0; i < 18; i++) {
+            const p = new THREE.Mesh(
+                new THREE.SphereGeometry(Math.max(eps, 0.04 + Math.random() * 0.04), 6, 6),
+                new THREE.MeshBasicMaterial({ color: 0xff5722, transparent: true, opacity: 0.6 })
+            );
+            p.position.set(
+                (Math.random() - 0.5) * 5,
+                0.3 + Math.random() * 3,
+                (Math.random() - 0.5) * 3.5
+            );
+            p.userData.speed = 0.3 + Math.random() * 0.5;
+            p.userData.baseX = p.position.x;
+            p.userData.baseZ = p.position.z;
+            physicalGroup.add(p);
+            heatParticles.push(p);
+        }
+
+        /* Etiqueta */
+        const labelPhysical = createLabel('CAPA FISICA', '#2ecc71');
+        labelPhysical.position.set(0, 5.8, 0);
+        physicalGroup.add(labelPhysical);
+
+        scene.add(physicalGroup);
+        scene.add(createPlatform(0, 0x2ecc71));
+
+        /* ==============================
+           CAPA CONECTIVIDAD — WI-FI
+        ============================== */
+        const connectivityGroup = new THREE.Group();
+        connectivityGroup.position.y = 7;
+
+        /* Router */
+        const routerBody = new THREE.Mesh(
+            new THREE.BoxGeometry(1.2, 0.2, 0.8),
+            new THREE.MeshStandardMaterial({ color: 0x263238, metalness: 0.4 })
+        );
+        routerBody.position.y = 0.1;
+        connectivityGroup.add(routerBody);
+        /* Antenas del router */
+        for (let i = -1; i <= 1; i += 2) {
+            const ant = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.02, 0.02, 0.8, 6),
+                new THREE.MeshStandardMaterial({ color: 0x455a64, metalness: 0.6 })
+            );
+            ant.position.set(i * 0.35, 0.6, 0);
+            connectivityGroup.add(ant);
+            const antTip = new THREE.Mesh(
+                new THREE.SphereGeometry(Math.max(eps, 0.04), 8, 8),
+                new THREE.MeshBasicMaterial({ color: 0x00bcd4 })
+            );
+            antTip.position.set(i * 0.35, 1.0, 0);
+            connectivityGroup.add(antTip);
+        }
+        /* LED del router */
+        const routerLed = new THREE.Mesh(
+            new THREE.SphereGeometry(Math.max(eps, 0.03), 8, 8),
+            new THREE.MeshBasicMaterial({ color: 0x00e5ff })
+        );
+        routerLed.position.set(0.4, 0.22, 0.25);
+        connectivityGroup.add(routerLed);
+
+        /* Ondas Wi-Fi (anillos que se expanden) */
+        const wifiWaves = [];
+        for (let i = 0; i < 4; i++) {
+            const wave = new THREE.Mesh(
+                new THREE.TorusGeometry(Math.max(eps, 0.5), 0.025, 8, 48),
+                new THREE.MeshBasicMaterial({ color: 0x00bcd4, transparent: true, opacity: 0.5 })
+            );
+            wave.rotation.x = Math.PI / 2;
+            wave.position.y = 0.8;
+            wave.userData.phase = i * 0.25;
+            connectivityGroup.add(wave);
+            wifiWaves.push(wave);
+        }
+
+        /* Módulo emisor (desde abajo) */
+        const emitter = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.15, 0.15, 0.3, 8),
+            new THREE.MeshStandardMaterial({ color: 0x37474f, metalness: 0.5 })
+        );
+        emitter.position.set(0, -0.15, 0);
+        connectivityGroup.add(emitter);
+        const emitterLight = new THREE.Mesh(
+            new THREE.SphereGeometry(Math.max(eps, 0.08), 8, 8),
+            new THREE.MeshBasicMaterial({ color: 0x00e5ff })
+        );
+        emitterLight.position.set(0, 0.05, 0);
+        connectivityGroup.add(emitterLight);
+
+        /* Etiqueta */
+        const labelConn = createLabel('CONECTIVIDAD', '#00bcd4');
+        labelConn.position.set(0, 2.2, 0);
+        connectivityGroup.add(labelConn);
+
+        scene.add(connectivityGroup);
+        scene.add(createPlatform(7, 0x00bcd4));
+
+        /* ==============================
+           CAPA PLATAFORMA — SERVIDOR CLOUD
+        ============================== */
+        const platformGroup = new THREE.Group();
+        platformGroup.position.y = 14;
+
+        /* Forma de nube (esferas agrupadas) */
+        const cloudMat = new THREE.MeshStandardMaterial({
+            color: 0xcfd8dc, transparent: true, opacity: 0.12,
+            emissive: 0x90a4ae, emissiveIntensity: 0.2
+        });
+        const cloudPositions = [
+            [0, 1.5, 0, 1.6], [-1.2, 1.2, 0.3, 1.1], [1.3, 1.3, -0.2, 1.2],
+            [-0.5, 1.8, -0.5, 0.9], [0.7, 1.9, 0.4, 0.85], [0, 1.0, 0, 1.3]
+        ];
+        cloudPositions.forEach(([cx, cy, cz, cr]) => {
+            const s = new THREE.Mesh(new THREE.SphereGeometry(Math.max(eps, cr), 16, 16), cloudMat);
+            s.position.set(cx, cy, cz);
+            platformGroup.add(s);
+        });
+
+        /* Servidor (cajas apiladas) */
+        const serverColors = [0x37474f, 0x455a64, 0x37474f];
+        serverColors.forEach((col, i) => {
+            const server = new THREE.Mesh(
+                new THREE.BoxGeometry(1.4, 0.35, 0.9),
+                new THREE.MeshStandardMaterial({ color: col, metalness: 0.6, roughness: 0.3 })
+            );
+            server.position.y = i * 0.4 + 0.2;
+            platformGroup.add(server);
+            /* LEDs del servidor */
+            for (let j = 0; j < 3; j++) {
+                const led = new THREE.Mesh(
+                    new THREE.SphereGeometry(Math.max(eps, 0.025), 6, 6),
+                    new THREE.MeshBasicMaterial({ color: j === 0 ? 0x00e676 : 0xffab00 })
+                );
+                led.position.set(-0.5 + j * 0.2, i * 0.4 + 0.38, 0.46);
+                platformGroup.add(led);
+            }
+        });
+
+        /* Anillo orbital alrededor del servidor */
+        const orbitRing = new THREE.Mesh(
+            new THREE.TorusGeometry(Math.max(eps, 2.2), 0.02, 8, 64),
+            new THREE.MeshBasicMaterial({ color: 0x90a4ae, transparent: true, opacity: 0.4 })
+        );
+        orbitRing.position.y = 0.6;
+        orbitRing.rotation.x = Math.PI / 2.5;
+        platformGroup.add(orbitRing);
+
+        /* Esferita orbitando */
+        const orbiter = new THREE.Mesh(
+            new THREE.SphereGeometry(Math.max(eps, 0.1), 10, 10),
+            new THREE.MeshBasicMaterial({ color: 0xb0bec5 })
+        );
+        platformGroup.add(orbiter);
+
+        /* Etiqueta */
+        const labelPlat = createLabel('PLATAFORMA', '#90a4ae');
+        labelPlat.position.set(0, 3.5, 0);
+        platformGroup.add(labelPlat);
+
+        scene.add(platformGroup);
+        scene.add(createPlatform(14, 0x90a4ae));
+
+        /* ==============================
+           CAPA APLICACIÓN — TELÉFONO + EXTRACTOR
+        ============================== */
+        const appGroup = new THREE.Group();
+        appGroup.position.y = 21;
+
+        /* Teléfono */
+        const phoneGroup = new THREE.Group();
+        const phoneBody = new THREE.Mesh(
+            new THREE.BoxGeometry(1.0, 1.8, 0.08),
+            new THREE.MeshStandardMaterial({ color: 0x212121, metalness: 0.5, roughness: 0.2 })
+        );
+        phoneGroup.add(phoneBody);
+        /* Pantalla */
+        const screenMat = new THREE.MeshBasicMaterial({ color: 0x1a237e });
+        const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.85, 1.55), screenMat);
+        screen.position.z = 0.041;
+        phoneGroup.add(screen);
+        /* Notificación en pantalla */
+        const notifBg = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.75, 0.5),
+            new THREE.MeshBasicMaterial({ color: 0xff9800, transparent: true, opacity: 0.9 })
+        );
+        notifBg.position.set(0, 0.3, 0.043);
+        phoneGroup.add(notifBg);
+        /* Texto de notificación (simulado con rectángulos) */
+        const notifLine1 = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.55, 0.06),
+            new THREE.MeshBasicMaterial({ color: 0xffffff })
+        );
+        notifLine1.position.set(0, 0.38, 0.044);
+        phoneGroup.add(notifLine1);
+        const notifLine2 = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.6, 0.04),
+            new THREE.MeshBasicMaterial({ color: 0xffe0b2 })
+        );
+        notifLine2.position.set(0, 0.22, 0.044);
+        phoneGroup.add(notifLine2);
+        phoneGroup.position.set(-2, 1, 0);
+        phoneGroup.rotation.y = 0.3;
+        appGroup.add(phoneGroup);
+
+        /* Extractor de aire */
+        const fanGroup = new THREE.Group();
+        /* Cilindro del extractor */
+        const fanHousing = new THREE.Mesh(
+            new THREE.CylinderGeometry(Math.max(eps, 0.7), Math.max(eps, 0.7), 0.5, 24),
+            new THREE.MeshStandardMaterial({ color: 0x546e7a, metalness: 0.6, roughness: 0.3 })
+        );
+        fanHousing.rotation.x = Math.PI / 2;
+        fanGroup.add(fanHousing);
+        /* Rejilla frontal */
+        const fanFront = new THREE.Mesh(
+            new THREE.CircleGeometry(Math.max(eps, 0.65), 24),
+            new THREE.MeshStandardMaterial({ color: 0x37474f, metalness: 0.5, transparent: true, opacity: 0.5 })
+        );
+        fanFront.position.z = 0.26;
+        fanGroup.add(fanFront);
+        /* Aspas del ventilador */
+        const bladesGroup = new THREE.Group();
+        for (let i = 0; i < 5; i++) {
+            const blade = new THREE.Mesh(
+                new THREE.BoxGeometry(0.12, 0.45, 0.02),
+                new THREE.MeshStandardMaterial({ color: 0x78909c, metalness: 0.4 })
+            );
+            blade.position.y = 0.22;
+            const pivot = new THREE.Group();
+            pivot.add(blade);
+            pivot.rotation.z = (i / 5) * Math.PI * 2;
+            bladesGroup.add(pivot);
+        }
+        bladesGroup.position.z = 0.1;
+        fanGroup.add(bladesGroup);
+
+        // Indicador visual de ventilación (se activa con backendDevices.aire)
+        const ventIndicator = createLabel('VENTILACIÓN OFF', '#80d8ff', 0.8);
+        ventIndicator.position.set(2.2, 2.2, 0);
+        appGroup.add(ventIndicator);
+
+        // Partículas de “viento” (humo/niebla alrededor del extractor)
+        const windParticles = [];
+        const WIND_COUNT = 130;
+        for (let i = 0; i < WIND_COUNT; i++) {
+            const size = 0.08 + Math.random() * 0.03;
+            const wp = new THREE.Mesh(
+                new THREE.SphereGeometry(size, 10, 10),
+                new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.0, depthWrite: false })
+            );
+
+            // Inicial cerca del frente del extractor
+            wp.position.set(2.2 + (Math.random() - 0.5) * 0.35, 1.2 + Math.random() * 0.25, (Math.random() - 0.5) * 0.2);
+            wp.userData.vx = (Math.random() * 0.6 + 0.2);
+            wp.userData.phase = Math.random() * Math.PI * 2;
+            appGroup.add(wp);
+            windParticles.push(wp);
+        }
+
+        fanGroup.position.set(2.2, 1, 0);
+        appGroup.add(fanGroup);
+
+
+        /* Línea de conexión teléfono → extractor (simula la orden) */
+        const connCurve = new THREE.QuadraticBezierCurve3(
+            new THREE.Vector3(-1.2, 1, 0),
+            new THREE.Vector3(0, 2.5, 0),
+            new THREE.Vector3(2.2, 1, 0)
+        );
+        const connLineGeo = new THREE.BufferGeometry().setFromPoints(connCurve.getPoints(30));
+        const connLine = new THREE.Line(connLineGeo, new THREE.LineBasicMaterial({ color: 0xff9800, transparent: true, opacity: 0.3 }));
+        appGroup.add(connLine);
+
+        /* Etiqueta */
+        const labelApp = createLabel('APLICACION', '#ff9800');
+        labelApp.position.set(0, 3.2, 0);
+        appGroup.add(labelApp);
+
+        scene.add(appGroup);
+        scene.add(createPlatform(21, 0xff9800));
+
+        /* ==============================
+           FLUJO DE DATOS — PARTÍCULAS
+        ============================== */
+        const dataParticlesUp = [];   /* Datos subiendo (sensor → cloud) */
+        const dataParticlesDown = []; /* Órdenes bajando (cloud → actuadores) */
+
+        function createDataParticle(goingUp) {
+            const color = goingUp ? 0x00e5ff : 0xffab00;
+            const p = new THREE.Mesh(
+                new THREE.SphereGeometry(Math.max(eps, 0.07), 8, 8),
+                new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.9 })
+            );
+            p.userData.goingUp = goingUp;
+            p.userData.progress = Math.random();
+            p.userData.speed = 0.08 + Math.random() * 0.06;
+            p.userData.offsetX = (Math.random() - 0.5) * 1.5;
+            p.userData.offsetZ = (Math.random() - 0.5) * 1.5;
+            scene.add(p);
+            return p;
+        }
+
+        for (let i = 0; i < 20; i++) dataParticlesUp.push(createDataParticle(true));
+        for (let i = 0; i < 12; i++) dataParticlesDown.push(createDataParticle(false));
+
+        function updateDataParticle(p, dt) {
+            p.userData.progress += p.userData.speed * dt;
+            if (p.userData.progress > 1) p.userData.progress -= 1;
+
+            const t = p.userData.progress;
+            const yStart = p.userData.goingUp ? 1 : 20;
+            const yEnd = p.userData.goingUp ? 20 : 1;
+            const y = yStart + (yEnd - yStart) * t;
+
+            /* Trayectoria ligeramente helicoidal */
+            const angle = t * Math.PI * 4 + p.userData.offsetX * 2;
+            const radius = 0.8 + Math.sin(t * Math.PI) * 0.5;
+            p.position.set(
+                Math.cos(angle) * radius + p.userData.offsetX * 0.3,
+                y,
+                Math.sin(angle) * radius + p.userData.offsetZ * 0.3
+            );
+
+            /* Opacidad fade en los extremos */
+            const fade = Math.sin(t * Math.PI);
+            p.material.opacity = fade * 0.9;
+            const s = 0.5 + fade * 0.5;
+            p.scale.setScalar(s);
+        }
+
+        /* ==============================
+           PARTÍCULAS DE FONDO
+        ============================== */
+        const bgParticlesCount = 150;
+        const bgParticlesGeo = new THREE.BufferGeometry();
+        const bgPositions = new Float32Array(bgParticlesCount * 3);
+        for (let i = 0; i < bgParticlesCount; i++) {
+            bgPositions[i * 3] = (Math.random() - 0.5) * 50;
+            bgPositions[i * 3 + 1] = Math.random() * 30;
+            bgPositions[i * 3 + 2] = (Math.random() - 0.5) * 50;
+        }
+        bgParticlesGeo.setAttribute('position', new THREE.BufferAttribute(bgPositions, 3));
+        const bgParticlesMat = new THREE.PointsMaterial({ color: 0x2ecc71, size: 0.06, transparent: true, opacity: 0.3 });
+        const bgParticles = new THREE.Points(bgParticlesGeo, bgParticlesMat);
+        scene.add(bgParticles);
+
+        /* ==============================
+           SISTEMA DE ANIMACIÓN DE CÁMARA
+        ============================== */
+        let tweenActive = false;
+        let tweenProgress = 0;
+        const tweenDuration = 1.8;
+        const tweenStartPos = new THREE.Vector3();
+        const tweenEndPos = new THREE.Vector3();
+        const tweenStartTarget = new THREE.Vector3();
+        const tweenEndTarget = new THREE.Vector3();
+
+        function easeInOutCubic(t) {
+            return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        }
+
+        function moveCameraTo(layerKey) {
+            const view = cameraViews[layerKey];
+            if (!view) return;
+            tweenStartPos.copy(camera.position);
+            tweenEndPos.set(...view.pos);
+            tweenStartTarget.copy(controls.target);
+            tweenEndTarget.set(...view.target);
+            tweenProgress = 0;
+            tweenActive = true;
+            controls.enabled = false;
+        }
+
+        function updateCameraTween(dt) {
+            if (!tweenActive) return;
+            tweenProgress += dt / tweenDuration;
+            if (tweenProgress >= 1) {
+                tweenProgress = 1;
+                tweenActive = false;
+                controls.enabled = true;
+            }
+            const t = easeInOutCubic(tweenProgress);
+            camera.position.lerpVectors(tweenStartPos, tweenEndPos, t);
+            controls.target.lerpVectors(tweenStartTarget, tweenEndTarget, t);
+            controls.update();
+        }
+
+        /* ==============================
+           INTERFAZ DE USUARIO
+        ============================== */
+        const infoPanel = document.getElementById('infoPanel');
+        const layerBadge = document.getElementById('layerBadge');
+        const layerTitle = document.getElementById('layerTitle');
+        const layerDesc = document.getElementById('layerDesc');
+        const layerElements = document.getElementById('layerElements');
+        const navBtns = document.querySelectorAll('.nav-btn');
+
+        function showLayerInfo(layerKey) {
+            const data = layerData[layerKey];
+            if (!data) return;
+
+            layerBadge.textContent = data.badge;
+            layerBadge.style.color = data.badgeColor;
+            layerBadge.style.background = data.badgeBg;
+            layerBadge.style.border = `1px solid ${data.badgeColor}33`;
+            layerTitle.textContent = data.title;
+            layerDesc.textContent = data.desc;
+
+            layerElements.innerHTML = '';
+            data.elements.forEach(el => {
+                const li = document.createElement('li');
+                li.innerHTML = `<i class="${el.icon}" style="color:${el.color}"></i><span>${el.text}</span>`;
+                layerElements.appendChild(li);
+            });
+
+            infoPanel.classList.remove('hidden');
+        }
+
+        function setActiveButton(layerKey) {
+            navBtns.forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.layer === layerKey);
+            });
+        }
+
+        let currentLayer = 'overview';
+
+        navBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const layer = btn.dataset.layer;
+                if (layer === currentLayer && !tweenActive) return;
+                currentLayer = layer;
+                setActiveButton(layer);
+                moveCameraTo(layer);
+                showLayerInfo(layer);
+            });
+        });
+
+        /* Mostrar vista general al inicio */
+        showLayerInfo('overview');
+
+        /* ==============================
+           REDIMENSIONAR
+        ============================== */
+        window.addEventListener('resize', () => {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+            composer.setSize(w, h);
+        });
+
+        /* ==============================
+           CONEXIÓN BACKEND (FASE 2)
+        ============================== */
+        const CHAT_ID = 6265279734; // chat.id real de Telegram
+        let backendDevices = { luz: false, aire: false };
+
+        // Debug HUD (para demo): muestra el estado que está leyendo el frontend
+        const debugHud = document.createElement('div');
+        debugHud.style.position = 'fixed';
+        debugHud.style.left = '20px';
+        debugHud.style.top = '70px';
+        debugHud.style.zIndex = '30';
+        debugHud.style.background = 'rgba(12,20,12,0.85)';
+        debugHud.style.border = '1px solid rgba(255,255,255,0.12)';
+        debugHud.style.borderRadius = '12px';
+        debugHud.style.padding = '10px 12px';
+        debugHud.style.color = '#e8efe8';
+        debugHud.style.fontFamily = "Space Grotesk, sans-serif";
+        debugHud.style.fontWeight = '700';
+        debugHud.style.fontSize = '12px';
+        debugHud.style.pointerEvents = 'none';
+        debugHud.textContent = 'HUD: conectando...';
+        document.body.appendChild(debugHud);
+
+
+        // Botones de prueba (FASE 2.1) - opcional, no rompe la escena.
+        function crearBotonesPrueba() {
+            const panel = document.createElement('div');
+            panel.style.position = 'fixed';
+            panel.style.left = '20px';
+            panel.style.bottom = '20px';
+            panel.style.zIndex = '20';
+            panel.style.display = 'flex';
+            panel.style.gap = '8px';
+            panel.style.flexWrap = 'wrap';
+            panel.style.pointerEvents = 'auto';
+
+            function mkBtn(label, onClick) {
+                const b = document.createElement('button');
+                b.textContent = label;
+                b.style.padding = '10px 14px';
+                b.style.borderRadius = '12px';
+                b.style.border = '1px solid rgba(255,255,255,0.12)';
+                b.style.background = 'rgba(12, 20, 12, 0.75)';
+                b.style.color = '#e8efe8';
+                b.style.cursor = 'pointer';
+                b.style.fontFamily = "'Space Grotesk', sans-serif";
+                b.style.fontWeight = '600';
+                b.style.fontSize = '12px';
+                b.onclick = onClick;
+                return b;
+            }
+
+            const postToggle = async (device) => {
+                // backend en esta fase usa endpoint /api/telegram-webhook
+                // y espera text: 'luz_toggle' / 'aire_toggle'
+                const payload = {
+                    message: { chat: { id: CHAT_ID }, text: device === 'luz' ? 'luz_toggle' : 'aire_toggle' }
+                };
+                await fetch('http://localhost:3000/api/telegram-webhook', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                }).catch(() => {});
+            };
+
+            panel.appendChild(mkBtn('💡 Toggle luz', () => postToggle('luz')));
+            panel.appendChild(mkBtn('❄️ Toggle aire', () => postToggle('aire')));
+
+            document.body.appendChild(panel);
+        }
+
+        crearBotonesPrueba();
+
+
+        async function obtenerEstado() {
+            try {
+                const response = await fetch(`http://localhost:3000/api/state/${CHAT_ID}`, { cache: 'no-store' });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+            if (data?.devices) {
+                    backendDevices = {
+                        luz: !!data.devices.luz,
+                        aire: !!data.devices.aire
+                    };
+                    console.log("[HTML] backendDevices updated:", backendDevices, "raw:", data);
+                    if (debugHud) debugHud.textContent = `HUD: luz=${backendDevices.luz} aire=${backendDevices.aire}`;
+                }
+            } catch (e) {
+                // si falla el backend, dejamos el último estado (no rompemos la escena)
+                console.error("[HTML] No se pudo leer /api/state:", e);
+            }
+        }
+
+        // Primer pull y luego refresco cada 2s
+        obtenerEstado();
+        setInterval(obtenerEstado, 2000);
+
+        function actualizarAccionVisual(devices) {
+            // Luz: en esta maqueta simulamos el encendido/apagado apagando intensidades de luces “físicas y aplicación”.
+            const luzOn = !!devices.luz;
+            lightPhysical.intensity = luzOn ? (1.5 + 0.3 * Math.sin(clock?.elapsedTime ? clock.elapsedTime * 1.5 : 0)) : 0.05;
+            lightApplication.intensity = luzOn ? (1.2 + 0.3 * Math.sin(clock?.elapsedTime ? clock.elapsedTime * 2.2 + 3 : 0)) : 0.05;
+
+            // Aire: mover aspas solo si aire está encendido.
+            const aireOn = !!devices.aire;
+            // (la rotación real se hace dentro del animate usando aireOn)
+            bladesGroup.userData.aireOn = aireOn;
+        }
+
+        /* ==============================
+           BUCLE DE ANIMACIÓN
+        ============================== */
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = Math.min(clock.getDelta(), 0.05);
+            const elapsed = clock.elapsedTime;
+
+            /* Tween de cámara */
+            updateCameraTween(dt);
+
+            /* Controles orbitales */
+            if (!tweenActive) controls.update();
+
+            /* Partículas de calor */
+            heatParticles.forEach(p => {
+                p.position.y += p.userData.speed * dt;
+                p.position.x = p.userData.baseX + Math.sin(elapsed * 2 + p.userData.baseX) * 0.3;
+                p.position.z = p.userData.baseZ + Math.cos(elapsed * 1.5 + p.userData.baseZ) * 0.2;
+                if (p.position.y > 4.2) {
+                    p.position.y = 0.3;
+                    p.material.opacity = 0.6;
+                }
+                p.material.opacity *= 0.998;
+            });
+
+            /* LED del sensor parpadea */
+            sensorLed.material.opacity = 0.5 + Math.sin(elapsed * 6) * 0.5;
+            sensorLed.material.transparent = true;
+
+            /* Ondas Wi-Fi */
+            wifiWaves.forEach(wave => {
+                const phase = (wave.userData.phase + elapsed * 0.5) % 1;
+                const scale = 0.5 + phase * 3;
+                wave.scale.set(scale, scale, 1);
+                wave.material.opacity = (1 - phase) * 0.5;
+            });
+
+            /* LED del router */
+            routerLed.material.opacity = 0.5 + Math.sin(elapsed * 8) * 0.5;
+            routerLed.material.transparent = true;
+
+            /* Esferita orbital del servidor */
+            const orbAngle = elapsed * 1.2;
+            const orbRadius = 2.2;
+            orbiter.position.set(
+                Math.cos(orbAngle) * orbRadius,
+                0.6 + Math.sin(orbAngle * 0.7) * 0.4,
+                Math.sin(orbAngle) * orbRadius * Math.cos(Math.PI / 2.5)
+            );
+            /* Rotar el anillo orbital */
+            orbitRing.rotation.z = elapsed * 0.15;
+
+            /* Aspas del extractor */
+            const aireOn = !!backendDevices.aire;
+            if (aireOn) {
+                bladesGroup.rotation.z = elapsed * 12;
+            } else {
+                // al apagar, vuelve a una posición base para que se note el cambio
+                bladesGroup.rotation.z = 0;
+            }
+
+            // Partículas de viento + indicador
+            if (aireOn) {
+                ventIndicator.position.y = 2.2 + Math.sin(elapsed * 8) * 0.05;
+                // Cambiamos el indicador a texto activo
+                ventIndicator.material.opacity = 1;
+                ventIndicator.material.color = new THREE.Color(0x66ccff);
+                windParticles.forEach((wp, i) => {
+                    wp.userData.phase += dt * wp.userData.vx;
+                    wp.position.x = 2.2 + Math.sin(wp.userData.phase + i) * 0.18;
+                    wp.position.y = 1.2 + (Math.sin(wp.userData.phase * 0.7 + i) * 0.12);
+                    wp.position.z = (Math.cos(wp.userData.phase * 0.9 + i) * 0.12);
+                    // Hacerlo más notorio tipo humo: más densidad y brillo
+                    const puff = 0.55 + 0.45 * Math.sin(elapsed * 9 + i * 0.8);
+                    wp.material.opacity = 0.25 + puff * 0.7;
+
+                });
+            } else {
+                windParticles.forEach(wp => {
+                    wp.material.opacity = 0.0;
+                });
+                ventIndicator.material.opacity = 0.35;
+            }
+
+
+            /* Partículas de flujo de datos */
+            dataParticlesUp.forEach(p => updateDataParticle(p, dt));
+            dataParticlesDown.forEach(p => updateDataParticle(p, dt));
+
+            /* Partículas de fondo flotando */
+            const bgPos = bgParticlesGeo.attributes.position.array;
+            for (let i = 0; i < bgParticlesCount; i++) {
+                bgPos[i * 3 + 1] += dt * 0.15;
+                if (bgPos[i * 3 + 1] > 30) bgPos[i * 3 + 1] = 0;
+            }
+            bgParticlesGeo.attributes.position.needsUpdate = true;
+
+            /* Luces (prueba extrema para verificar reflejo) */
+            const luzOn = !!backendDevices.luz;
+            lightPhysical.intensity = luzOn ? 20 : 0;
+            lightConnectivity.intensity = 1.2 + Math.sin(elapsed * 2 + 1) * 0.3;
+            lightPlatform.intensity = 1.0 + Math.sin(elapsed * 1.8 + 2) * 0.2;
+            lightApplication.intensity = luzOn ? 20 : 0;
+
+            /* Notificación parpadea */
+            notifBg.material.opacity = 0.7 + Math.sin(elapsed * 3) * 0.3;
+
+            /* Renderizar con bloom */
+            composer.render();
+        }
+
+        /* ==============================
+           INICIO
+        ============================== */
+        /* Ocultar pantalla de carga tras un breve retraso */
+        setTimeout(() => {
+            document.getElementById('loading').classList.add('fade-out');
+            setTimeout(() => {
+                document.getElementById('loading').style.display = 'none';
+            }, 800);
+        }, 800);
+
+        animate();
+
+    </script>
+</body>
+</html>
