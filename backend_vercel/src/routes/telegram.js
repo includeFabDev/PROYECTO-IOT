@@ -173,7 +173,8 @@ export function telegramWebhookRoute(supabase) {
         const t = (text || '').toLowerCase().trim();
 
         // poner temperatura <num>
-        const mTemp = t.match(/temperatura\s*(?:a|=|:)?\s*(\d{1,2})/i) || t.match(/temp(?:\s*(?:a|=|:)?\s*)(\d{1,2}))/i);
+        const mTemp = t.match(/temperatura\s*(?:a|=|:)?\s*(\d{1,2})/i) || t.match(/temp(?:\s*(?:a|=|:)?\s*)(\d{1,2})/i);
+
         if (mTemp) {
           const val = Number(mTemp[1]);
           if (!Number.isNaN(val)) {
