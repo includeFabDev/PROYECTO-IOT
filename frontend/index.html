@@ -1374,10 +1374,15 @@
                 backendDevices.riego = sim.riego;
             }
 
-            // Importante: mantener hora virtual visible incluso en modo sim
-            if (simModeSelect.value === 'sim' && simClockText) {
-                simClockText.textContent = `Hora: ${minutesToHHMM(sim.minutesOfDay)}`;
+        // Mantener hora virtual visible también en modo Backend
+            if (simClockText) {
+                if (simModeSelect.value === 'sim') {
+                    simClockText.textContent = `Hora: ${minutesToHHMM(sim.minutesOfDay)}`;
+                } else if (typeof backendDevices.horaVirtual === 'string') {
+                    simClockText.textContent = `Hora: ${backendDevices.horaVirtual}`;
+                }
             }
+
 
             if (thermometer?.tempText) {
                 // Si estamos en simulación local, priorizamos sim.temp_c.

@@ -5,6 +5,12 @@ const DEFAULT_STATE = {
   temperatura_c: 27,
   humedad_pct: 68,
   modoAutomatico: true,
+
+  // Reloj
+  // Retrocompatibilidad: si no existen estos campos en registros antiguos,
+  // el backend y el cron asumirán usarHoraReal=true y timeScale=1.
+  usarHoraReal: true,
+  timeScale: 1,
   horaVirtual: '18:45'
 };
 

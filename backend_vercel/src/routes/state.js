@@ -33,7 +33,9 @@ export function stateRoute(supabase) {
           temperatura_c: merged.temperatura_c,
           humedad_pct: merged.humedad_pct,
           modoAutomatico: !!merged.modoAutomatico,
-          horaVirtual: merged.horaVirtual
+          horaVirtual: merged.horaVirtual,
+          usarHoraReal: merged.usarHoraReal,
+          timeScale: merged.timeScale
         },
         lastAction: data.last_action,
         updatedAt: data.updated_at

@@ -121,11 +121,26 @@ export default async function handler(req, res) {
       const current = await ensureDeviceState(supabase, chatId);
       const state = { ...(current.state || {}) };
 
-      // Hora REAL (del servidor). Así el frontend/estado se sincroniza con el minuto actual.
-      const now = new Date();
-      const hh = now.getHours();
-      const mm = now.getMinutes();
-      state.horaVirtual = toHHMM(hh, mm);
+      // Hora virtual (fuente de verdad = cron)
+      // Retrocompatibilidad:
+      // - si no existe usarHoraReal => true
+      // - si no existe timeScale => 1
+      const usarHoraReal = state.usarHoraReal !== false;
+      const timeScale = typeof state.timeScale === 'number' && !Number.isNaN(state.timeScale) ? state.timeScale : 1;
+
+      if (usarHoraReal) {
+        // Hora real (del servidor)
+        const now = new Date();
+        state.horaVirtual = toHHMM(now.getHours(), now.getMinutes());
+      } else {
+        // Avanza horaVirtual sumando minutos virtuales (timeScale * 1 minuto por tick)
+        // Nota: el cron está definido con 1 tick = 1 minuto virtual.
+        const { hh, mm } = parseHHMM(state.horaVirtual);
+        const totalMinutes = hh * 60 + mm;
+        const nextMinutes = totalMinutes + (timeScale || 1);
+        state.horaVirtual = minutesToHHMM(nextMinutes);
+      }
+
 
 
       // actuadores

@@ -1,4 +1,7 @@
 import { executeAction, toggleDevice } from '../services/executeAction.js';
+import { ensureDeviceState } from '../services/deviceStates.js';
+import { saveDeviceState } from '../services/deviceStates.js';
+
 
 export function actionRoute(supabase) {
   return async function actionHandler(req, res) {
@@ -8,6 +11,32 @@ export function actionRoute(supabase) {
 
       if (!chatId && chatId !== 0) {
         return res.status(400).json({ error: 'Missing chatId' });
+      }
+
+      // Control explícito del reloj (usarHoraReal / timeScale)
+      // Contrato (simple y extensible):
+      // 1) device='time', mode='backend'|'sim' => set usarHoraReal
+      // 2) device='time', timeScale=<n> => set timeScale
+      if (device === 'time') {
+        // timeScale override (x1/x2/x5/x10)
+        if (typeof body.timeScale === 'number' && !Number.isNaN(body.timeScale)) {
+          const nextTimeScale = Math.max(0, Math.min(1000, body.timeScale));
+          const current = await ensureDeviceState(supabase, chatId);
+          const nextState = { ...(current.state || {}) };
+          nextState.timeScale = nextTimeScale;
+          await saveDeviceState(supabase, chatId, nextState, 'set_timeScale');
+          return res.json({ ok: true });
+        }
+
+        // backend/sim
+        if (mode === 'backend' || mode === 'sim') {
+          const usarHoraReal = mode === 'backend';
+          const current = await ensureDeviceState(supabase, chatId);
+          const nextState = { ...(current.state || {}) };
+          nextState.usarHoraReal = usarHoraReal;
+          await saveDeviceState(supabase, chatId, nextState, 'set_usarHoraReal');
+          return res.json({ ok: true });
+        }
       }
 
       // Modo: explícito para toggles rápidos
