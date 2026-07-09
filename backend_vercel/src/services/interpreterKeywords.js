@@ -34,12 +34,15 @@ export function parseKeywordsToAction(text) {
     return { action: 'turn_on', device: 'luz' };
   }
 
+  // 🔥/❄️ Calor/Frío deben mapearse a TEMP (temperatura_c), no a ventilación.
+  // La ventilación se controla por keywords explícitos (aire/ventilación) o por la lógica demo
+  // dentro de executeAction() cuando la temperatura cruza umbrales.
   if (wantsCalor) {
-    return { action: 'turn_on', device: 'aire' };
+    return { action: 'turn_on', device: 'temperatura_c' };
   }
 
   if (wantsFrio) {
-    return { action: 'turn_off', device: 'aire' };
+    return { action: 'turn_off', device: 'temperatura_c' };
   }
 
   // Luz
