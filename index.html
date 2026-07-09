@@ -1311,71 +1311,7 @@
           simClockText.textContent = `Hora: ${minutesToHHMM(sim.minutesOfDay)}`;
         }
 
-        // ==============================
-        // Botones de prueba (FASE 2.1) - opcional, no rompe la escena.
-        function crearBotonesPrueba() {
-            const panel = document.createElement('div');
-            panel.style.position = 'fixed';
-            panel.style.left = '20px';
-            panel.style.bottom = '20px';
-            panel.style.zIndex = '20';
-            panel.style.display = 'flex';
-            panel.style.gap = '8px';
-            panel.style.flexWrap = 'wrap';
-            panel.style.pointerEvents = 'auto';
 
-            function mkBtn(label, onClick) {
-                const b = document.createElement('button');
-                b.textContent = label;
-                b.style.padding = '10px 14px';
-                b.style.borderRadius = '12px';
-                b.style.border = '1px solid rgba(255,255,255,0.12)';
-                b.style.background = 'rgba(12, 20, 12, 0.75)';
-                b.style.color = '#e8efe8';
-                b.style.cursor = 'pointer';
-                b.style.fontFamily = "'Space Grotesk', sans-serif";
-                b.style.fontWeight = '600';
-                b.style.fontSize = '12px';
-                b.onclick = onClick;
-                return b;
-            }
-
-            const postToggle = async (device) => {
-                // backend en esta fase usa endpoint /api/telegram-webhook
-                // y espera text: 'luz_toggle' / 'aire_toggle'
-                const payload = {
-                    message: { chat: { id: CHAT_ID }, text: device === 'luz' ? 'luz_toggle' : 'aire_toggle' }
-                };
-                await fetch('http://localhost:3000/api/telegram-webhook', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                }).catch(() => {});
-            };
-
-            panel.appendChild(mkBtn('💡 Toggle luz', () => postToggle('luz')));
-            panel.appendChild(mkBtn('❄️ Toggle aire', () => postToggle('aire')));
-
-            // 🌡️🔥 Temperatura / 💧 Humedad / 💦 Riego (demo sin Telegram)
-            const postAction = async (device, mode) => {
-                // manda directamente al backend: POST /api/action
-                // mode: 'on' | 'off'
-                await fetch('http://localhost:3000/api/action', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ chatId: CHAT_ID, device, mode })
-                }).catch(() => {});
-            };
-
-            panel.appendChild(mkBtn('🌡️🔥 Activar calor', () => postAction('temperatura_c', 'on')));
-            panel.appendChild(mkBtn('🌵 Activar sequedad', () => postAction('humedad_pct', 'on')));
-            panel.appendChild(mkBtn('💦 Activar riego', () => postAction('riego', 'on')));
-
-            document.body.appendChild(panel);
-        }
-
-
-        crearBotonesPrueba();
 
 
         async function obtenerEstado() {

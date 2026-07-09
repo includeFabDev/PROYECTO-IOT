@@ -19,6 +19,11 @@ export function parseKeywordsToAction(text) {
   const wantsTurnOn = /\b(enciende|enciend(a|es)|prende|prendo|prendam|prendida|prender|encender|activar|subir)\b|\bon\b|\blight\b/.test(t);
   const wantsTurnOff = /\b(apaga|apagad[oa]?|apagar|apagues|apagad(a|os)|off|desactivar|bajar|baja|seca)\b/.test(t);
 
+  // helper: explícito ON/OFF por palabras
+  const wantsOffWords = /\b(apaga|apagar|desactivar|off|baja|bajar|seca|cierra|deten|stop)\b/.test(t);
+  const wantsOnWords = /\b(enciende|encender|activar|on|prende|prender|subir|abre|start|activar)\b/.test(t);
+
+
   // Alternativas por contexto (existente)
   if (/oscuro|no veo|noche|penumbra/.test(t)) {
     return { action: 'turn_on', device: 'luz' };
@@ -40,29 +45,34 @@ export function parseKeywordsToAction(text) {
   if (wantsAire && wantsTurnOn) return { action: 'turn_on', device: 'aire' };
   if (wantsAire && wantsTurnOff) return { action: 'turn_off', device: 'aire' };
 
-  // 🌡️ Temperatura (simulación)
-  if (/(activar|encender|subir)/.test(t) && /calor|temperatura/.test(t)) {
-    return { action: 'turn_on', device: 'temperatura_c' };
-  }
-  if (/(desactivar|apagar|bajar)/.test(t) && /calor|temperatura/.test(t)) {
-    return { action: 'turn_off', device: 'temperatura_c' };
+  // 🌡️ Temperatura (simulación): aceptar frases con encender/apagar o activar/desactivar
+  if (/calor|temperatura/.test(t)) {
+    if (wantsOnWords || wantsTurnOn || /activar|encender|subir/.test(t)) {
+      return { action: 'turn_on', device: 'temperatura_c' };
+    }
+    if (wantsOffWords || wantsTurnOff || /desactivar|apagar|bajar/.test(t)) {
+      return { action: 'turn_off', device: 'temperatura_c' };
+    }
   }
 
-  // 💧 Humedad (simulación)
-  if (wantsSequedad && (wantsTurnOn || /activar|encender|bajar|baja/.test(t))) {
-    return { action: 'turn_on', device: 'humedad_pct' };
+  // 💧 Humedad: aquí se usa el device "humedad_pct" para modo seco (sequedad)
+  // Soporta tanto "sequedad" como mensajes con "humedad".
+  if (wantsSequedad) {
+    if (wantsOnWords || wantsTurnOn) return { action: 'turn_on', device: 'humedad_pct' };
+    if (wantsOffWords || wantsTurnOff) return { action: 'turn_off', device: 'humedad_pct' };
   }
-  if (wantsHumedad && (wantsTurnOff || /desactivar|apagar|subir|suba/.test(t))) {
-    return { action: 'turn_off', device: 'humedad_pct' };
+  if (wantsHumedad) {
+    // si piden "humedad" con un verbo de apagar/desactivar, interpretamos como fin del modo seco
+    if (wantsOffWords || wantsTurnOff) return { action: 'turn_off', device: 'humedad_pct' };
+    if (wantsOnWords || wantsTurnOn) return { action: 'turn_on', device: 'humedad_pct' };
   }
 
   // 💦 Riego (simulación)
-  if (wantsRiego && (wantsTurnOn || /regar|activar|encender/.test(t))) {
-    return { action: 'turn_on', device: 'riego' };
+  if (wantsRiego) {
+    if (wantsOnWords || wantsTurnOn) return { action: 'turn_on', device: 'riego' };
+    if (wantsOffWords || wantsTurnOff) return { action: 'turn_off', device: 'riego' };
   }
-  if (wantsRiego && (wantsTurnOff || /desactivar|apagar|parar|off/.test(t))) {
-    return { action: 'turn_off', device: 'riego' };
-  }
+
 
   return null;
 }
