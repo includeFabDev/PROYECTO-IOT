@@ -17,7 +17,15 @@ export function createApp() {
 
   const supabase = getSupabaseClient();
 
+  // Debug: registra toda petición que llegue a Express.
+  // Útil para confirmar si Telegram está entrando o si Vercel responde 404 antes.
+  app.use((req, res, next) => {
+    console.log('[REQUEST]', req.method, req.originalUrl);
+    next();
+  });
+
   app.get('/api/state/:chatId', awaitableHandler(async (req, res) => {
+
     // para asegurar inicialización automática como en la versión original
     const chatId = req.params.chatId;
     await ensureDeviceState(supabase, chatId);

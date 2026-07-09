@@ -6,14 +6,31 @@ import { env } from './config/env.js';
 
 const app = createApp();
 
-export default async function handler(req, res) {
-  // Ajuste defensivo: Vercel a veces no configura bodyparser dependiendo del runtime
-  // pero ya tenemos express.json() en createApp().
-  return app(req, res);
+export default function handler(req, res) {
+  try {
+    // Importante: NO retornar `app(req,res)`.
+    // Express maneja internamente el flujo con res.send/res.json.
+    return app(req, res);
+  } catch (err) {
+    console.error('[vercel-handler] error:', err);
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+    return undefined;
+  }
 }
 
 // También dejamos una export nombrada para compatibilidad con algunos adapters.
 export function vercelHandler(req, res) {
-  return app(req, res);
+  try {
+    return app(req, res);
+  } catch (err) {
+    console.error('[vercelHandler named] error:', err);
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+    return undefined;
+  }
 }
+
 
