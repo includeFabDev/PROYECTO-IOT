@@ -4,7 +4,10 @@ export function parseKeywordsToAction(text) {
   const t = (text || '').toLowerCase();
 
   // device (incluye nuevos simuladores)
-  const wantsLuz = /\bluz\b|foco|lampara|bombilla|ilumin/.test(t);
+  const wantsLuz = /(\bluz\b|\bluces\b|foco|lampara|bombilla|ilumin)/.test(t);
+
+
+
   const wantsAire = /\b(aire|ventilador)\b|ac|acond|cool|hel(a|a)r/.test(t);
 
   const wantsCalor = /\b(calor|bochorno|sofoc|sudando|me derrito|pesado)\b/.test(t);
@@ -17,7 +20,9 @@ export function parseKeywordsToAction(text) {
 
   // accion genérica
   const wantsTurnOn = /\b(enciende|enciend(a|es)|prende|prendo|prendam|prendida|prender|encender|activar|subir)\b|\bon\b|\blight\b/.test(t);
+  // soporta tambien "apaga" "apagar" sin depender de singular/plural de dispositivo
   const wantsTurnOff = /\b(apaga|apagad[oa]?|apagar|apagues|apagad(a|os)|off|desactivar|bajar|baja|seca)\b/.test(t);
+
 
   // helper: explícito ON/OFF por palabras
   const wantsOffWords = /\b(apaga|apagar|desactivar|off|baja|bajar|seca|cierra|deten|stop)\b/.test(t);
