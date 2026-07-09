@@ -1313,7 +1313,7 @@
 
         async function obtenerEstado() {
             try {
-                const response = await fetch(`https://proyecto-iot-a3ac.vercel.app/api/state${CHAT_ID}`, { cache: 'no-store' });
+                const response = await fetch(`https://proyecto-iot-mocha.vercel.app/api/state${CHAT_ID}`, { cache: 'no-store' });
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const data = await response.json();
             if (data?.devices) {
