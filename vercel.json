@@ -17,8 +17,7 @@
   "routes": [
     {
       "src": "/api/cron/invernadero",
-      "dest": "/api/cron/invernadero.js",
-      "continue": true
+      "dest": "/api/cron/invernadero.js"
     },
     {
       "src": "/api/(.*)",
