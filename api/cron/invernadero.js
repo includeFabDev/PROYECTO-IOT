@@ -134,7 +134,9 @@ export default async function handler(req, res) {
         state.horaVirtual = toHHMM(now.getHours(), now.getMinutes());
       } else {
         // Avanza horaVirtual sumando minutos virtuales (timeScale * 1 minuto por tick)
-        // Nota: el cron está definido con 1 tick = 1 minuto virtual.
+        // Nota: el cron se ejecuta cada N segundos (config en Vercel).
+        // Para que horaVirtual avance “1 minuto por minuto real”, timeScale debe ajustarse proporcionalmente a la cadencia.
+        // (ej: si el cron corre cada 30s, timeScale=0.5 para mantener 1:1)
         const { hh, mm } = parseHHMM(state.horaVirtual);
         const totalMinutes = hh * 60 + mm;
         const nextMinutes = totalMinutes + (timeScale || 1);
@@ -154,6 +156,9 @@ export default async function handler(req, res) {
       const modoAutomatico = state.modoAutomatico !== false;
       if (modoAutomatico) {
         const nextState = applyClimateRules(state, actuators);
+        // Asegurar que el reloj no se pierda tras aplicar reglas
+        if (typeof state.horaVirtual === 'string') nextState.horaVirtual = state.horaVirtual;
+
         // también podríamos aplicar riego/aire automático en el futuro
         // por ahora solo ajustamos temperatura/humedad
         await saveDeviceState(supabase, chatId, nextState, 'tick_clima');

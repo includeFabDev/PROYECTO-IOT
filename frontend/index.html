@@ -1374,7 +1374,9 @@
                 backendDevices.riego = sim.riego;
             }
 
-        // Mantener hora virtual visible también en modo Backend
+            // Mantener hora virtual visible también en modo Backend
+            // (siempre mostramos lo que viene del backend)
+            if (simClockText)
             if (simClockText) {
                 if (simModeSelect.value === 'sim') {
                     simClockText.textContent = `Hora: ${minutesToHHMM(sim.minutesOfDay)}`;
