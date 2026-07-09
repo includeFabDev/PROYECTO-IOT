@@ -1311,9 +1311,6 @@
           simClockText.textContent = `Hora: ${minutesToHHMM(sim.minutesOfDay)}`;
         }
 
-
-
-
         async function obtenerEstado() {
             try {
                 const response = await fetch(`https://proyecto-iot-a3ac.vercel.app/api/state${CHAT_ID}`, { cache: 'no-store' });
