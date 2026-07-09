@@ -51,12 +51,14 @@ function applySimulatedModeFromIrrigation(state, deviceOn) {
   const MAX_HUM = 70;
   const STEP = 6;
 
+  // FIX: riego ON debe dejar state.riego=true y OFF => false
   state.riego = deviceOn;
   if (deviceOn) {
     state.humedad_pct = Math.min(MAX_HUM, (state.humedad_pct ?? NORMAL_HUM) + STEP);
   } else {
-    state.humedad_pct = Math.max(NORMAL_HUM, (state.humedad_pct ?? MAX_HUM));
+    state.humedad_pct = Math.max(NORMAL_HUM, (state.humedad_pct ?? MAX_HUM) - STEP);
   }
+
 }
 
 export async function executeAction(supabase, actionObj, chatId) {
