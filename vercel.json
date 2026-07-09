@@ -6,11 +6,20 @@
       "use": "@vercel/node"
     },
     {
+      "src": "api/cron/invernadero.js",
+      "use": "@vercel/node"
+    },
+    {
       "src": "frontend/**",
       "use": "@vercel/static"
     }
   ],
   "routes": [
+    {
+      "src": "/api/cron/invernadero",
+      "dest": "/api/cron/invernadero.js",
+      "continue": true
+    },
     {
       "src": "/api/(.*)",
       "dest": "/api/index.js"
