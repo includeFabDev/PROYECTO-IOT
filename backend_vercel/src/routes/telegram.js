@@ -196,7 +196,8 @@ export function telegramWebhookRoute(supabase) {
         }
 
         // poner humedad <num>
-        const mHum = t.match(/humedad\s*(?:a|=|:)?\s*(\d{1,2})/i) || t.match(/hum(?:\s*(?:a|=|:)?\s*)(\d{1,2}))/i);
+        const mHum = t.match(/humedad\s*(?:a|=|:)?\s*(\d{1,2})\b/i) || t.match(/hum\s*(?:a|=|:)?\s*(\d{1,2})\b/i);
+
         if (mHum) {
           const val = Number(mHum[1]);
           if (!Number.isNaN(val)) {
