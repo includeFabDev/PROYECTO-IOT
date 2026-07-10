@@ -1101,7 +1101,7 @@
         /* ==============================
            CONEXIÓN BACKEND (FASE 2)
         ============================== */
-        const CHAT_ID = 6265279734; // chat.id real de Telegram
+        const CHAT_ID = 123456789; // chat.id real de Telegram
         let backendDevices = { luz: false, aire: false };
 
         // Debug HUD (para demo): muestra el estado que está leyendo el frontend
@@ -1376,12 +1376,14 @@
 
             // Mantener hora virtual visible también en modo Backend
             // (siempre mostramos lo que viene del backend)
-            if (simClockText)
             if (simClockText) {
                 if (simModeSelect.value === 'sim') {
                     simClockText.textContent = `Hora: ${minutesToHHMM(sim.minutesOfDay)}`;
-                } else if (typeof backendDevices.horaVirtual === 'string') {
-                    simClockText.textContent = `Hora: ${backendDevices.horaVirtual}`;
+                } else {
+                    const now = new Date();
+                    const hh = String(now.getHours()).padStart(2, '0');
+                    const mm = String(now.getMinutes()).padStart(2, '0');
+                    simClockText.textContent = `Hora: ${hh}:${mm}`;
                 }
             }
 

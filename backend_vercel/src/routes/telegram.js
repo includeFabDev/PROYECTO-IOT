@@ -2,6 +2,9 @@ import { executeAction } from '../services/executeAction.js';
 import { ensureDeviceState } from '../services/deviceStates.js';
 import { env } from '../config/env.js';
 
+// ID de base de datos unificado para la simulación de la maqueta
+const dbChatId = 123456789;
+
 /**
  * Envía un mensaje nuevo a Telegram con opción de teclado inline.
  */
@@ -170,38 +173,39 @@ export function telegramWebhookRoute(supabase) {
         console.log(`[Telegram Webhook] Callback recibida. Chat: ${chatId}, Data: ${callbackData}`);
         let messageAck = 'Actualizando...';
 
-        // Procesar acciones
+        // Procesar acciones siempre sobre el dbChatId fijo
         if (callbackData === 'luz_on') {
-          await executeAction(supabase, { action: 'turn_on', device: 'luz' }, chatId);
+          await executeAction(supabase, { action: 'turn_on', device: 'luz' }, dbChatId);
           messageAck = '💡 Luz encendida';
         } else if (callbackData === 'luz_off') {
-          await executeAction(supabase, { action: 'turn_off', device: 'luz' }, chatId);
+          await executeAction(supabase, { action: 'turn_off', device: 'luz' }, dbChatId);
           messageAck = '🔌 Luz apagada';
         } else if (callbackData === 'aire_on') {
-          await executeAction(supabase, { action: 'turn_on', device: 'aire' }, chatId);
+          await executeAction(supabase, { action: 'turn_on', device: 'aire' }, dbChatId);
           messageAck = '🌬️ Ventilador encendido';
         } else if (callbackData === 'aire_off') {
-          await executeAction(supabase, { action: 'turn_off', device: 'aire' }, chatId);
+          await executeAction(supabase, { action: 'turn_off', device: 'aire' }, dbChatId);
           messageAck = '❄️ Ventilador apagado';
         } else if (callbackData === 'riego_on') {
-          await executeAction(supabase, { action: 'turn_on', device: 'riego' }, chatId);
+          await executeAction(supabase, { action: 'turn_on', device: 'riego' }, dbChatId);
           messageAck = '🌱 Riego activado';
         } else if (callbackData === 'riego_off') {
-          await executeAction(supabase, { action: 'turn_off', device: 'riego' }, chatId);
+          await executeAction(supabase, { action: 'turn_off', device: 'riego' }, dbChatId);
           messageAck = '🚫 Riego detenido';
         } else if (callbackData === 'refresh_panel') {
           messageAck = '🔄 Estado actualizado';
         }
 
-        // 1. Responder la callback query
+        // 1. Responder la callback query de Telegram
         await answerTelegramCallbackQuery(callbackQueryId, messageAck);
 
-        // 2. Obtener estado nuevo y editar el mensaje existente
-        const current = await ensureDeviceState(supabase, chatId);
+        // 2. Obtener estado nuevo de la base de datos fija y editar el mensaje existente
+        const current = await ensureDeviceState(supabase, dbChatId);
         const statusText = getStatusText(current.state);
         const keyboard = buildDynamicKeyboard(current.state);
         
         const updateText = `🎛️ *Panel de Control - Smart Home / Invernadero*\n\n${statusText}`;
+        // Mandamos a chatId (el chat donde se presionó el botón) pero con la info del dbChatId fijo
         await updateTelegramMessage(chatId, messageId, updateText, keyboard);
 
         return res.json({ ok: true });
@@ -210,12 +214,14 @@ export function telegramWebhookRoute(supabase) {
       // Si no es un callback, es un mensaje de texto normal
       console.log(`[Telegram Webhook] Mensaje normal recibido. Chat: ${chatId}`);
 
-      const current = await ensureDeviceState(supabase, chatId);
+      // Consultamos el estado de la base de datos fija
+      const current = await ensureDeviceState(supabase, dbChatId);
       const statusText = getStatusText(current.state);
       const keyboard = buildDynamicKeyboard(current.state);
 
       const welcomeMsg = `👋 *¡Bienvenido al sistema de control de tu Smart Home / Invernadero!*\n\nA continuación, tienes las opciones disponibles para controlar los dispositivos y sensores:\n\n${statusText}`;
 
+      // Mandamos el mensaje al usuario que escribió (chatId) usando los datos del dbChatId fijo
       await sendTelegramMessage(chatId, welcomeMsg, keyboard);
       return res.json({ ok: true });
 
