@@ -125,14 +125,12 @@ export default async function handler(req, res) {
     // opera sobre un único registro fijo en Supabase.
     const FIXED_CHAT_ID = '123456789';
 
-    // Throttle: si el último tick fue hace menos de esto, no hacemos nada.
-    // Evita que el cron automático de Vercel (cada 1 min) y los pings del
-    // frontend (cada 5s) peleen entre sí.
-    const MIN_DT_MS = 4000;
-    const MIN_DT_SEC = MIN_DT_MS / 1000;
     // Si pasan más de 2 minutos entre ticks (cron atascado, app cerrada, etc.),
     // clampeamos para que un solo tick no salte la simulación 2h adelante.
     const MAX_DT_SEC = 120;
+    // Tick "mínimo" cuando no hay updated_at (registro recién creado):
+    // usamos 5s para que el primer ciclo tenga efecto visible.
+    const DEFAULT_DT_SEC = 5;
 
     const supabase = getSupabaseClient();
 
@@ -158,34 +156,19 @@ export default async function handler(req, res) {
       }
     }
 
-    // Calculamos cuánto tiempo real pasó desde el último tick. Si updated_at
-    // viene nulo (registro recién creado) asumimos 1 tick "largo" (10s) para
-    // que el primer ciclo tenga efecto visible.
-    let dtSeconds = 10;
-    if (row.updated_at) {
-      const last = new Date(row.updated_at).getTime();
-      const now = Date.now();
-      dtSeconds = Math.max(MIN_DT_SEC, Math.min(MAX_DT_SEC, (now - last) / 1000));
-    }
-
-    // Si el último tick fue hace menos de MIN_DT_MS, devolvemos skipped sin
-    // escribir en la BD. El frontend o Vercel volverá a llamar más tarde.
-    if (row.updated_at) {
-      const last = new Date(row.updated_at).getTime();
-      const elapsed = Date.now() - last;
-      if (elapsed < MIN_DT_MS) {
-        return res.status(200).json({
-          ok: true,
-          updated: 0,
-          skipped: true,
-          elapsedMs: elapsed,
-          note: 'Throttled: el último tick es muy reciente'
-        });
-      }
+    // Calculamos cuánto tiempo real pasó desde el último write del CRON.
+    // Usamos un campo dedicado (__lastCronMs) guardado DENTRO del state
+    // para que el próximo tick pueda calcular su dt real sin confundirse
+    // con los writes de /api/state (que también actualiza updated_at).
+    let dtSeconds = DEFAULT_DT_SEC;
+    const persistedState = (row && row.state) ? row.state : {};
+    const lastCronMs = typeof persistedState.__lastCronMs === 'number' ? persistedState.__lastCronMs : null;
+    if (lastCronMs !== null && lastCronMs > 0) {
+      dtSeconds = Math.max(0.5, Math.min(MAX_DT_SEC, (Date.now() - lastCronMs) / 1000));
     }
 
     const chatId = row.chat_id;
-    const state = { ...(row.state || {}) };
+    const state = { ...persistedState };
 
     // Hora virtual (fuente de verdad = cron)
     // Retrocompatibilidad:
@@ -202,8 +185,6 @@ export default async function handler(req, res) {
       state.horaVirtual = toHHMM(now.getHours(), now.getMinutes());
     } else {
       // Avanza horaVirtual proporcional al tiempo real pasado × timeScale.
-      // Antes avanzaba "1 minuto fijo por tick", lo que se desincronizaba
-      // con la cadencia real (1 min vs 5s).
       const { hh, mm } = parseHHMM(state.horaVirtual);
       const totalMinutes = hh * 60 + mm;
       // "1s real = 1 min simulado" como convención original; timeScale
@@ -225,6 +206,10 @@ export default async function handler(req, res) {
       const nextState = applyClimateRules(state, actuators, dtSeconds, timeScale);
       // Asegurar que el reloj no se pierda tras aplicar reglas
       if (typeof state.horaVirtual === 'string') nextState.horaVirtual = state.horaVirtual;
+      // Guardar la marca temporal del último tick del cron DENTRO del state
+      // para que el próximo tick pueda calcular su dt real sin confundirse
+      // con los writes de /api/state.
+      nextState.__lastCronMs = Date.now();
 
       await saveDeviceState(supabase, chatId, nextState, 'tick_clima');
       return res.status(200).json({
@@ -238,6 +223,7 @@ export default async function handler(req, res) {
     }
 
     // Modo manual: solo reloj, mantenemos temp/hum tal cual.
+    state.__lastCronMs = Date.now();
     await saveDeviceState(supabase, chatId, state, 'tick_reloj');
     return res.status(200).json({
       ok: true,
