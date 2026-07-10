@@ -1,246 +1,227 @@
-import { parseKeywordsToAction } from '../services/interpreterKeywords.js';
-import { executeAction, toggleDevice } from '../services/executeAction.js';
+import { executeAction } from '../services/executeAction.js';
 import { ensureDeviceState } from '../services/deviceStates.js';
 import { env } from '../config/env.js';
 
-function extractTelegramTextAndChatId(body) {
-  const msg = body.message || body.callback_query?.message;
-  const callbackQuery = body.callback_query;
-
-  let chatId = null;
-  let text = null;
-
-  if (msg?.chat?.id) chatId = msg.chat.id;
-  if (msg?.text) text = msg.text;
-
-  if (!text && callbackQuery?.data) {
-    // En esta fase: usaremos toggle según callback_data
-    text = callbackQuery.data;
-  }
-
-  return { chatId, text };
-}
-
-async function sendTelegramMessage(chatId, messageText) {
+/**
+ * Envía un mensaje nuevo a Telegram con opción de teclado inline.
+ */
+async function sendTelegramMessage(chatId, messageText, replyMarkup = null) {
   const token = env.TELEGRAM_BOT_TOKEN;
   if (!token) {
     console.warn('[Telegram] TELEGRAM_BOT_TOKEN no configurado (env.TELEGRAM_BOT_TOKEN vacío).');
     return;
   }
 
-  // IMPORTANTE: template string con comillas invertidas
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
-  const payload = { chat_id: chatId, text: messageText };
+  const payload = { 
+    chat_id: chatId, 
+    text: messageText, 
+    parse_mode: 'Markdown' 
+  };
+  if (replyMarkup) {
+    payload.reply_markup = replyMarkup;
+  }
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-
-  // Log para depuración en Vercel (token/chat_id inválidos se verán aquí)
   try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
     const result = await response.json();
     console.log('[Telegram sendMessage result]', { ok: result?.ok, description: result?.description });
   } catch (e) {
-    console.warn('[Telegram sendMessage] no JSON en respuesta');
-  }
-
-  if (!response.ok) {
-    console.warn('[Telegram sendMessage] HTTP error', response.status);
+    console.warn('[Telegram sendMessage] error', e);
   }
 }
 
+/**
+ * Edita un mensaje existente en Telegram para actualizar su texto y teclado inline.
+ */
+async function updateTelegramMessage(chatId, messageId, messageText, replyMarkup = null) {
+  const token = env.TELEGRAM_BOT_TOKEN;
+  if (!token) return;
 
-function toFriendlyConfirmation(actionObj, currentState) {
-  if (!actionObj) return null;
-  const { action, device } = actionObj;
-  const on = action === 'turn_on';
+  const url = `https://api.telegram.org/bot${token}/editMessageText`;
+  const payload = {
+    chat_id: chatId,
+    message_id: messageId,
+    text: messageText,
+    parse_mode: 'Markdown'
+  };
+  if (replyMarkup) {
+    payload.reply_markup = replyMarkup;
+  }
 
-  const luz = !!currentState?.luz;
-  const aire = !!currentState?.aire;
-  const riego = !!currentState?.riego;
-
-  if (device === 'luz') return (on ? luz : !luz) ? '💡 Luz encendida correctamente.' : '💡 Luz apagada correctamente.';
-  if (device === 'aire') return (on ? aire : !aire) ? '🌬️ Ventilación encendida correctamente.' : '🌬️ Ventilación apagada correctamente.';
-  if (device === 'riego') return (on ? riego : !riego) ? '🌱 Sistema de riego activado correctamente.' : '🌱 Sistema de riego detenido correctamente.';
-
-  return null;
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json();
+    console.log('[Telegram editMessageText result]', { ok: result?.ok, description: result?.description });
+  } catch (e) {
+    console.error('[Telegram editMessageText error]', e);
+  }
 }
 
-function extractQueryType(text) {
-  const t = (text || '').toLowerCase().trim();
+/**
+ * Responde a un callback query de Telegram para quitar la animación de carga en la app del usuario.
+ */
+async function answerTelegramCallbackQuery(callbackQueryId, text = '') {
+  const token = env.TELEGRAM_BOT_TOKEN;
+  if (!token) return;
 
-  // Temperatura
-  if (/\b(temperatura|temp)\b/.test(t)) return 'temperature';
+  const url = `https://api.telegram.org/bot${token}/answerCallbackQuery`;
+  const payload = { callback_query_id: callbackQueryId };
+  if (text) {
+    payload.text = text;
+  }
 
-  // Humedad
-  if (/\b(humedad|hum)\b/.test(t)) return 'humidity';
-
-  // Estado (global)
-  if (/\b(estado|status|que\s+hay|como\s+va|como\s+est[aá]a)\b/.test(t)) return 'status';
-
-  // Hora
-  if (/\b(hora|hora\s+virtual|reloj)\b/.test(t)) return 'time';
-
-  // Modo automático
-  if (/\b(automatico|autom[aá]tico|modo\s*auto|auto\b|automatic)\b/.test(t)) return 'auto_mode';
-
-  return null;
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json();
+    console.log('[Telegram answerCallbackQuery result]', { ok: result?.ok });
+  } catch (e) {
+    console.error('[Telegram answerCallbackQuery error]', e);
+  }
 }
 
-function toFriendlyQueryResponse(queryType, current) {
-  const state = current?.state || {};
-  const temperatura_c = current?.state?.temperatura_c;
-  const humedad_pct = current?.state?.humedad_pct;
-  const horaVirtual = current?.state?.horaVirtual;
-  const modoAutomatico = current?.state?.modoAutomatico;
+/**
+ * Genera el texto con el estado actual del invernadero/Smart Home.
+ */
+function getStatusText(state) {
+  const luzStr = state.luz ? '💡 ENCENDIDA' : '🔌 APAGADA';
+  const aireStr = state.aire ? '🌬️ ENCENDIDO' : '❄️ APAGADO';
+  const riegoStr = state.riego ? '🌱 ACTIVO' : '🚫 DETENIDO';
+  const tempStr = typeof state.temperatura_c === 'number' ? `${state.temperatura_c.toFixed(1)}°C` : '--°C';
+  const humStr = typeof state.humedad_pct === 'number' ? `${state.humedad_pct.toFixed(0)}%` : '--%';
+  const horaStr = state.horaVirtual || '--:--';
+  const autoStr = state.modoAutomatico ? '🤖 ACTIVADO' : '🔧 MANUAL';
 
-  if (queryType === 'temperature') {
-    return `🌡️ Temperatura actual: ${typeof temperatura_c === 'number' ? `${temperatura_c.toFixed(0)}°C` : '--°C'}`;
-  }
-
-  if (queryType === 'humidity') {
-    return `💧 Humedad actual: ${typeof humedad_pct === 'number' ? `${humedad_pct.toFixed(0)}%` : '--%'}`;
-  }
-
-  if (queryType === 'time') {
-    return `🕒 Hora virtual: ${horaVirtual || '--:--'}`;
-  }
-
-  if (queryType === 'auto_mode') {
-    return `🤖 Modo automático: ${modoAutomatico ? 'Activado' : 'Desactivado'}`;
-  }
-
-  if (queryType === 'status') {
-    return [
-      '🌱 Estado del invernadero',
-      `💡 Luz: ${state.luz ? 'Encendida' : 'Apagada'}`,
-      `🌬️ Aire: ${state.aire ? 'Activado' : 'Apagado'}`,
-      `🌱 Riego: ${state.riego ? 'Activado' : 'Detenido'}`,
-      `🌡️ Temperatura: ${typeof temperatura_c === 'number' ? `${temperatura_c.toFixed(0)}°C` : '--°C'}`,
-      `💦 Humedad: ${typeof humedad_pct === 'number' ? `${humedad_pct.toFixed(0)}%` : '--%'}`,
-      `🕒 Hora: ${horaVirtual || '--:--'}`,
-      `🤖 Modo automático: ${modoAutomatico ? 'Activado' : 'Desactivado'}`
-    ].join('\n');
-  }
-
-  return null;
+  return [
+    `💡 *Luz:* ${luzStr}`,
+    `🌬️ *Ventilador:* ${aireStr}`,
+    `🌱 *Riego:* ${riegoStr}`,
+    `🌡️ *Temperatura:* ${tempStr}`,
+    `💦 *Humedad:* ${humStr}`,
+    `🕒 *Hora Virtual:* ${horaStr}`,
+    `🤖 *Modo Automático:* ${autoStr}`
+  ].join('\n');
 }
 
+/**
+ * Construye el teclado dinámico basándose en los estados actuales.
+ * Muestra solo la acción opuesta (ej: Apagar si está encendido).
+ */
+function buildDynamicKeyboard(state) {
+  const keyboard = [];
 
+  // Fila Luz
+  if (state.luz) {
+    keyboard.push([{ text: '🔌 Apagar Luz', callback_data: 'luz_off' }]);
+  } else {
+    keyboard.push([{ text: '💡 Encender Luz', callback_data: 'luz_on' }]);
+  }
+
+  // Fila Ventilador
+  if (state.aire) {
+    keyboard.push([{ text: '❄️ Apagar Ventilador', callback_data: 'aire_off' }]);
+  } else {
+    keyboard.push([{ text: '🌬️ Encender Ventilador', callback_data: 'aire_on' }]);
+  }
+
+  // Fila Riego
+  if (state.riego) {
+    keyboard.push([{ text: '🚫 Detener Riego', callback_data: 'riego_off' }]);
+  } else {
+    keyboard.push([{ text: '🌱 Activar Riego', callback_data: 'riego_on' }]);
+  }
+
+  // Fila de actualización
+  keyboard.push([{ text: '🔄 Actualizar Estado', callback_data: 'refresh_panel' }]);
+
+  return { inline_keyboard: keyboard };
+}
+
+/**
+ * Route Handler para el Webhook de Telegram
+ */
 export function telegramWebhookRoute(supabase) {
   return async function telegramWebhookHandler(req, res) {
     try {
       const body = req.body || {};
-      const { chatId, text } = extractTelegramTextAndChatId(body);
+      const isCallback = !!body.callback_query;
+      const callbackQueryId = body.callback_query?.id;
+      const callbackData = body.callback_query?.data;
+      const messageId = body.callback_query?.message?.message_id || body.message?.message_id;
+      const chatId = body.callback_query?.message?.chat?.id || body.message?.chat?.id;
 
-      if (!chatId) return res.status(200).json({ ok: true, ignored: true });
+      if (!chatId) {
+        return res.status(200).json({ ok: true, ignored: true });
+      }
 
-      // callbacks: toggle según el estado actual (esto corrige el problema del toggle fijo)
-      if (text === 'luz_toggle') {
-        await toggleDevice(supabase, 'luz', chatId);
+      if (isCallback && callbackQueryId && callbackData) {
+        console.log(`[Telegram Webhook] Callback recibida. Chat: ${chatId}, Data: ${callbackData}`);
+        let messageAck = 'Actualizando...';
+
+        // Procesar acciones
+        if (callbackData === 'luz_on') {
+          await executeAction(supabase, { action: 'turn_on', device: 'luz' }, chatId);
+          messageAck = '💡 Luz encendida';
+        } else if (callbackData === 'luz_off') {
+          await executeAction(supabase, { action: 'turn_off', device: 'luz' }, chatId);
+          messageAck = '🔌 Luz apagada';
+        } else if (callbackData === 'aire_on') {
+          await executeAction(supabase, { action: 'turn_on', device: 'aire' }, chatId);
+          messageAck = '🌬️ Ventilador encendido';
+        } else if (callbackData === 'aire_off') {
+          await executeAction(supabase, { action: 'turn_off', device: 'aire' }, chatId);
+          messageAck = '❄️ Ventilador apagado';
+        } else if (callbackData === 'riego_on') {
+          await executeAction(supabase, { action: 'turn_on', device: 'riego' }, chatId);
+          messageAck = '🌱 Riego activado';
+        } else if (callbackData === 'riego_off') {
+          await executeAction(supabase, { action: 'turn_off', device: 'riego' }, chatId);
+          messageAck = '🚫 Riego detenido';
+        } else if (callbackData === 'refresh_panel') {
+          messageAck = '🔄 Estado actualizado';
+        }
+
+        // 1. Responder la callback query
+        await answerTelegramCallbackQuery(callbackQueryId, messageAck);
+
+        // 2. Obtener estado nuevo y editar el mensaje existente
         const current = await ensureDeviceState(supabase, chatId);
-        const reply = toFriendlyConfirmation({ action: 'turn_on', device: 'luz' }, current.state) || '✅ Luz actualizada.';
-        await sendTelegramMessage(chatId, reply);
+        const statusText = getStatusText(current.state);
+        const keyboard = buildDynamicKeyboard(current.state);
+        
+        const updateText = `🎛️ *Panel de Control - Smart Home / Invernadero*\n\n${statusText}`;
+        await updateTelegramMessage(chatId, messageId, updateText, keyboard);
+
         return res.json({ ok: true });
       }
 
-      if (text === 'aire_toggle') {
-        await toggleDevice(supabase, 'aire', chatId);
-        const current = await ensureDeviceState(supabase, chatId);
-        const reply = toFriendlyConfirmation({ action: 'turn_on', device: 'aire' }, current.state) || '✅ Ventilación actualizada.';
-        await sendTelegramMessage(chatId, reply);
-        return res.json({ ok: true });
-      }
+      // Si no es un callback, es un mensaje de texto normal
+      console.log(`[Telegram Webhook] Mensaje normal recibido. Chat: ${chatId}`);
 
-      // Primero: intentamos interpretar como acción
-      const actionObj = parseKeywordsToAction(text || '');
-      console.log('[Telegram] texto recibido:', text);
-      console.log('[Telegram] actionObj:', actionObj);
-
-      // Si NO es acción conocida, intentamos como consulta/estado
-      if (!actionObj) {
-        const queryType = extractQueryType(text);
-        if (queryType) {
-          const current = await ensureDeviceState(supabase, chatId);
-          const reply = toFriendlyQueryResponse(queryType, current);
-          await sendTelegramMessage(chatId, reply || 'No tengo ese dato ahora.');
-          return res.json({ ok: true });
-        }
-
-        // Control avanzado por comandos “poner/activ ar” (Fase 2.3 mínima)
-        const t = (text || '').toLowerCase().trim();
-
-        // poner temperatura <num>
-        // temp <num> / temperatura <num> (simple, sin regex inválidas)
-        const mTemp = t.match(/\btemperatura\s*(?:a|=|:)?\s*(\d{1,2})\b/i) || t.match(/\btemp\s*(?:a|=|:)?\s*(\d{1,2})\b/i);
-
-
-        if (mTemp) {
-          const val = Number(mTemp[1]);
-          if (!Number.isNaN(val)) {
-            const current = await ensureDeviceState(supabase, chatId);
-            const next = { ...(current.state || {}) };
-            next.temperatura_c = Math.max(0, Math.min(60, val));
-            // mantenemos reglas demo: si temp sube mucho, aire se enciende
-            if (next.temperatura_c >= 32) next.aire = true;
-            if (next.temperatura_c <= 30) next.aire = false;
-            const lastAction = 'set_temperatura_c';
-            // usamos executeAction para persistir vía saveDeviceState
-            await executeAction(supabase, { action: next.temperatura_c >= (current.state?.temperatura_c ?? 27) ? 'turn_on' : 'turn_off', device: 'temperatura_c' }, chatId);
-            const updated = await ensureDeviceState(supabase, chatId);
-            await sendTelegramMessage(chatId, `🌡️ Temperatura ajustada a ${updated?.state?.temperatura_c ?? val}°C.`);
-            return res.json({ ok: true });
-          }
-        }
-
-        // poner humedad <num>
-        const mHum = t.match(/humedad\s*(?:a|=|:)?\s*(\d{1,2})\b/i) || t.match(/hum\s*(?:a|=|:)?\s*(\d{1,2})\b/i);
-
-        if (mHum) {
-          const val = Number(mHum[1]);
-          if (!Number.isNaN(val)) {
-            await executeAction(supabase, { action: 'turn_on', device: 'humedad_pct' }, chatId);
-            await sendTelegramMessage(chatId, `💧 Humedad objetivo recibido: ${val}%. (Demo ajusta con modo seco/riego).`);
-            return res.json({ ok: true });
-          }
-        }
-
-        // poner hora <HH:MM>
-        const mTime = t.match(/hora\s*(?:a|=|:)?\s*(\d{1,2})\s*[:h]\s*(\d{2})/i) || t.match(/reloj\s*(?:a|=|:)?\s*(\d{1,2})\s*[:h]\s*(\d{2})/i);
-        if (mTime) {
-          const hh = Number(mTime[1]);
-          const mm = Number(mTime[2]);
-          if (!Number.isNaN(hh) && !Number.isNaN(mm) && hh >= 0 && hh < 24 && mm >= 0 && mm < 60) {
-            const current = await ensureDeviceState(supabase, chatId);
-            const state = { ...(current.state || {}) };
-            state.horaVirtual = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-            await (await import('../services/deviceStates.js')).saveDeviceState(supabase, chatId, state, 'set_horaVirtual');
-            await sendTelegramMessage(chatId, `🕒 Hora virtual ajustada a ${state.horaVirtual}.`);
-            return res.json({ ok: true });
-          }
-        }
-
-        await sendTelegramMessage(chatId, 'No entendí el comando. Prueba: temperatura / humedad / estado / hora / modo automático.');
-        return res.json({ ok: true, ignored: true });
-      }
-
-
-      // Es acción: ejecuta y confirma leyendo estado real
-      await executeAction(supabase, actionObj, chatId);
       const current = await ensureDeviceState(supabase, chatId);
+      const statusText = getStatusText(current.state);
+      const keyboard = buildDynamicKeyboard(current.state);
 
-      const reply = toFriendlyConfirmation(actionObj, current.state) || '✅ Orden ejecutada.';
-      await sendTelegramMessage(chatId, reply);
+      const welcomeMsg = `👋 *¡Bienvenido al sistema de control de tu Smart Home / Invernadero!*\n\nA continuación, tienes las opciones disponibles para controlar los dispositivos y sensores:\n\n${statusText}`;
 
+      await sendTelegramMessage(chatId, welcomeMsg, keyboard);
       return res.json({ ok: true });
 
     } catch (err) {
-      console.error(err);
+      console.error('[Telegram Webhook Error]', err);
       return res.status(500).json({ error: 'Error en webhook' });
     }
   };
 }
-
-
