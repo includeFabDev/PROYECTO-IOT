@@ -72,7 +72,12 @@ function applyClimateRules(currentState, actuators) {
   const prevTemp = typeof state.temperatura_c === 'number' ? state.temperatura_c : 27;
   const prevHum = typeof state.humedad_pct === 'number' ? state.humedad_pct : 68;
 
-  const alpha = 0.35; // 0..1, cuánto se acerca en 1 minuto
+  // FIX: alpha escala con timeScale. Sin esto, en x10 el clima se siente igual que en x1
+  // porque el cron sigue moviéndose solo alpha por tick. Con alpha*ts, a x10 el clima
+  // se acerca mucho más rápido al target por minuto virtual, haciendo que el cambio
+  // sea drástico visualmente. Se clampea a 0.95 para no perder la sensación "suave".
+  const timeScale = typeof state.timeScale === 'number' && state.timeScale > 0 ? state.timeScale : 1;
+  const alpha = Math.min(0.95, 0.35 * timeScale);
   const temp = prevTemp + (tempTarget - prevTemp) * alpha;
   const hum = prevHum + (humTarget - prevHum) * alpha;
 

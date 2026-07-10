@@ -1387,7 +1387,7 @@
             const t = typeof d.temperatura_c === 'number' ? `${d.temperatura_c.toFixed(0)}°C` : '--';
             const h = typeof d.humedad_pct === 'number' ? `${d.humedad_pct.toFixed(0)}%` : '--';
             const riego = d.riego ? 'ON' : 'OFF';
-            debugHud.textContent = `HUD | Luz:${d.luz ? 'ON' : 'OFF'} Aire:${d.aire ? 'ON' : 'OFF'} Temp:${t} Hum:${h} Riego:${riego}`;
+            debugHud.textContent = `HUD | Luz:${d.luz ? 'ON' : 'OFF'} Aire:${d.aire ? 'ON' : 'OFF'} Temp:${t} Hum:${h} Riego:${riego} Vel:x${d.timeScale || 1}`;
         }
 
 
@@ -1571,10 +1571,19 @@
                         temperatura_c: typeof data.devices.temperatura_c === 'number' ? data.devices.temperatura_c : 27,
                         humedad_pct: typeof data.devices.humedad_pct === 'number' ? data.devices.humedad_pct : 68,
                         modoAutomatico: !!data.devices.modoAutomatico,
-                        horaVirtual: data.devices.horaVirtual || '18:45'
+                        horaVirtual: data.devices.horaVirtual || '18:45',
+                        timeScale: typeof data.devices.timeScale === 'number' && data.devices.timeScale > 0 ? data.devices.timeScale : 1
                     };
                     console.log("[HTML] backendDevices updated:", backendDevices, "raw:", data);
                     if (debugHud) renderHud();
+                    // Sincronizar el selector local con el timeScale que viene del backend
+                    // (así el HUD del navegador refleja lo que el bot acaba de cambiar)
+                    if (simSpeedSelect && backendDevices.timeScale) {
+                        const ts = String(backendDevices.timeScale);
+                        if ([...simSpeedSelect.options].some(o => o.value === ts)) {
+                            simSpeedSelect.value = ts;
+                        }
+                    }
 
                 }
             } catch (e) {
@@ -1606,15 +1615,39 @@
 
         function animate() {
             requestAnimationFrame(animate);
-            const dt = Math.min(clock.getDelta(), 0.05);
+            const rawDt = Math.min(clock.getDelta(), 0.05);
             const elapsed = clock.elapsedTime;
+
+            // FIX: timeScale global. El backend persiste timeScale (1/2/5/10) en Supabase
+            // y el frontend lo lee en backendDevices.timeScale. Aquí decidimos cuánto
+            // se acelera cada subsistema:
+            //   - dtClimate: solo afecta al motor local (updateLocalClimate). En Backend
+            //     vale 1 (no usamos motor local). En Sim local vale rawDt (sin acelerar)
+            //     porque updateLocalClimate ya multiplica por su propio speedFactor.
+            //   - animSpeed: factor para todas las animaciones visuales (aspas, lerp del
+            //     termómetro, partículas, ondas Wi-Fi, orbital, etc.). En Backend vale
+            //     timeScale; en Sim local vale simSpeedSelect.
+            const isSimLocal = simModeSelect.value === 'sim';
+            const tsBackend = (typeof backendDevices.timeScale === 'number' && backendDevices.timeScale > 0)
+                ? backendDevices.timeScale : 1;
+            const tsLocal = (() => {
+                const v = Number(simSpeedSelect.value);
+                return (!v || Number.isNaN(v)) ? 1 : v;
+            })();
+
+            const animSpeed = isSimLocal ? tsLocal : tsBackend;
+            // dtClimate siempre es rawDt: updateLocalClimate aplica su propio speedFactor
+            // internamente, así que no debemos pre-multiplicar.
+            const dtClimate = rawDt;
+            // dt visual ya con la aceleración aplicada
+            const dt = rawDt * animSpeed;
 
             // Refrescar indicadores Etapa 1 (temperatura/humedad/riego)
             // - Si estás en Simulación local, actualizamos con el motor local
             // - Si estás en Backend, usamos lo que viene de Supabase
 
-            if (simModeSelect.value === 'sim') {
-                updateLocalClimate(dt);
+            if (isSimLocal) {
+                updateLocalClimate(dtClimate);
                 // inyectamos al render como si vinieran del backend
                 backendDevices.temperatura_c = sim.temp_c;
                 backendDevices.humedad_pct = sim.hum_pct;

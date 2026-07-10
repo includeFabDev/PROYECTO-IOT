@@ -1,5 +1,5 @@
 import { executeAction } from '../services/executeAction.js';
-import { ensureDeviceState } from '../services/deviceStates.js';
+import { ensureDeviceState, saveDeviceState } from '../services/deviceStates.js';
 import { env } from '../config/env.js';
 
 // ID de base de datos unificado para la simulación de la maqueta
@@ -146,6 +146,16 @@ function buildDynamicKeyboard(state) {
     keyboard.push([{ text: '🌱 Activar Riego', callback_data: 'riego_on' }]);
   }
 
+  // Fila Velocidad de simulación (x1 / x2 / x5 / x10)
+  const ts = state.timeScale;
+  const labelScale = (n) => (ts === n ? `• x${n} •` : `x${n}`);
+  keyboard.push([
+    { text: labelScale(1),  callback_data: 'scale_1' },
+    { text: labelScale(2),  callback_data: 'scale_2' },
+    { text: labelScale(5),  callback_data: 'scale_5' },
+    { text: labelScale(10), callback_data: 'scale_10' },
+  ]);
+
   // Fila de actualización
   keyboard.push([{ text: '🔄 Actualizar Estado', callback_data: 'refresh_panel' }]);
 
@@ -192,6 +202,15 @@ export function telegramWebhookRoute(supabase) {
         } else if (callbackData === 'riego_off') {
           await executeAction(supabase, { action: 'turn_off', device: 'riego' }, dbChatId);
           messageAck = '🚫 Riego detenido';
+        } else if (callbackData === 'scale_1' || callbackData === 'scale_2' || callbackData === 'scale_5' || callbackData === 'scale_10') {
+          // Botones de velocidad de simulación: persisten timeScale en Supabase
+          // para que el cron del clima y el frontend lean el mismo factor.
+          const nextScale = Number(callbackData.split('_')[1]);
+          const current = await ensureDeviceState(supabase, dbChatId);
+          const nextState = { ...(current.state || {}) };
+          nextState.timeScale = nextScale;
+          await saveDeviceState(supabase, dbChatId, nextState, 'set_timeScale');
+          messageAck = `⏩ Velocidad: x${nextScale}`;
         } else if (callbackData === 'refresh_panel') {
           messageAck = '🔄 Estado actualizado';
         }
