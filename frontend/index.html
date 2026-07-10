@@ -602,6 +602,171 @@
         humidityText = { mesh: humidityTextMesh };
         riegoIndicator = riegoTextMesh;
 
+        /* ==============================
+           MINI VENTILADOR — Capa Física (estética cyberpunk neón)
+           Posicionado dentro del invernadero, lado derecho.
+        ============================== */
+        const phyFanGroup = new THREE.Group();
+
+        // Motor central — cilindro brillante con emissive neón
+        const phyFanMotor = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.12, 0.12, 0.18, 16),
+            new THREE.MeshStandardMaterial({
+                color: 0x263238, metalness: 0.8, roughness: 0.2,
+                emissive: 0x00e5ff, emissiveIntensity: 0.3
+            })
+        );
+        phyFanMotor.rotation.x = Math.PI / 2;
+        phyFanGroup.add(phyFanMotor);
+
+        // Anillo neón alrededor del motor
+        const phyFanRing = new THREE.Mesh(
+            new THREE.TorusGeometry(0.16, 0.015, 8, 32),
+            new THREE.MeshBasicMaterial({ color: 0x2ecc71, transparent: true, opacity: 0.7 })
+        );
+        phyFanRing.rotation.x = Math.PI / 2;
+        phyFanGroup.add(phyFanRing);
+
+        // Aspas — grupo que rota sobre Z (frente del ventilador)
+        const phyFanBlades = new THREE.Group();
+        const BLADE_COUNT = 4;
+        for (let i = 0; i < BLADE_COUNT; i++) {
+            const blade = new THREE.Mesh(
+                new THREE.BoxGeometry(0.06, 0.32, 0.015),
+                new THREE.MeshStandardMaterial({
+                    color: 0x78909c, metalness: 0.5, roughness: 0.3,
+                    emissive: 0x2ecc71, emissiveIntensity: 0.15
+                })
+            );
+            blade.position.y = 0.18;
+            const pivot = new THREE.Group();
+            pivot.add(blade);
+            pivot.rotation.z = (i / BLADE_COUNT) * Math.PI * 2;
+            phyFanBlades.add(pivot);
+        }
+        phyFanBlades.position.z = 0.1;
+        phyFanGroup.add(phyFanBlades);
+
+        // Soporte/poste del ventilador
+        const phyFanPost = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.03, 0.03, 0.6, 6),
+            new THREE.MeshStandardMaterial({
+                color: 0x455a64, metalness: 0.7, roughness: 0.3,
+                emissive: 0x2ecc71, emissiveIntensity: 0.08
+            })
+        );
+        phyFanPost.position.y = -0.38;
+        phyFanGroup.add(phyFanPost);
+
+        // Base pequeña
+        const phyFanBase = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.15, 0.18, 0.06, 12),
+            new THREE.MeshStandardMaterial({
+                color: 0x37474f, metalness: 0.6, roughness: 0.3,
+                emissive: 0x00e5ff, emissiveIntensity: 0.1
+            })
+        );
+        phyFanBase.position.y = -0.66;
+        phyFanGroup.add(phyFanBase);
+
+        // Posicionar el ventilador dentro del invernadero (lado derecho)
+        phyFanGroup.position.set(2.8, 1.4, 1.5);
+        physicalGroup.add(phyFanGroup);
+
+        // Variable de velocidad actual para suavizar arranque/parada
+        let phyFanSpeed = 0;
+
+        /* ==============================
+           TERMÓMETRO 3D — Capa Física (estética cyberpunk neón)
+           Contenedor de vidrio + barra de mercurio con lerp y color dinámico.
+           Posicionado al lado izquierdo del invernadero, cerca de los datos.
+        ============================== */
+        const thermoGroup = new THREE.Group();
+
+        // Tubo exterior (vidrio transparente)
+        const THERMO_HEIGHT = 1.6;
+        const THERMO_RADIUS = 0.08;
+        const thermoGlass = new THREE.Mesh(
+            new THREE.CylinderGeometry(THERMO_RADIUS, THERMO_RADIUS, THERMO_HEIGHT, 16, 1, true),
+            new THREE.MeshPhysicalMaterial({
+                color: 0xb2dfdb, transparent: true, opacity: 0.15,
+                roughness: 0.05, metalness: 0.0, side: THREE.DoubleSide,
+                emissive: 0x2ecc71, emissiveIntensity: 0.05
+            })
+        );
+        thermoGlass.position.y = THERMO_HEIGHT / 2;
+        thermoGroup.add(thermoGlass);
+
+        // Tapa superior del tubo
+        const thermoCapTop = new THREE.Mesh(
+            new THREE.CircleGeometry(THERMO_RADIUS, 16),
+            new THREE.MeshPhysicalMaterial({
+                color: 0xb2dfdb, transparent: true, opacity: 0.12,
+                side: THREE.DoubleSide
+            })
+        );
+        thermoCapTop.rotation.x = -Math.PI / 2;
+        thermoCapTop.position.y = THERMO_HEIGHT;
+        thermoGroup.add(thermoCapTop);
+
+        // Bulbo inferior (esfera neón)
+        const thermoBulb = new THREE.Mesh(
+            new THREE.SphereGeometry(0.13, 16, 16),
+            new THREE.MeshStandardMaterial({
+                color: 0xff6600, metalness: 0.3, roughness: 0.4,
+                emissive: 0xff6600, emissiveIntensity: 0.5,
+                transparent: true, opacity: 0.9
+            })
+        );
+        thermoBulb.position.y = -0.02;
+        thermoGroup.add(thermoBulb);
+
+        // Barra de mercurio (la que sube y baja con lerp)
+        const MERCURY_RADIUS = 0.05;
+        const mercuryMat = new THREE.MeshStandardMaterial({
+            color: 0xff6600, metalness: 0.4, roughness: 0.3,
+            emissive: 0xff6600, emissiveIntensity: 0.6,
+            transparent: true, opacity: 0.9
+        });
+        // Empezamos con una altura mínima; se actualizará por lerp en animate()
+        const mercuryBar = new THREE.Mesh(
+            new THREE.CylinderGeometry(MERCURY_RADIUS, MERCURY_RADIUS, 0.01, 12),
+            mercuryMat
+        );
+        mercuryBar.position.y = 0.1;
+        thermoGroup.add(mercuryBar);
+
+        // Marcas de escala en el tubo (estilo neón)
+        const SCALE_MARKS = 6; // ~0, 10, 20, 30, 40, 50°C
+        for (let i = 0; i <= SCALE_MARKS; i++) {
+            const markY = 0.1 + (i / SCALE_MARKS) * (THERMO_HEIGHT - 0.2);
+            const markWidth = (i % 2 === 0) ? 0.12 : 0.06;
+            const mark = new THREE.Mesh(
+                new THREE.BoxGeometry(markWidth, 0.008, 0.008),
+                new THREE.MeshBasicMaterial({ color: 0x2ecc71, transparent: true, opacity: 0.4 })
+            );
+            mark.position.set(THERMO_RADIUS + 0.02, markY, 0);
+            thermoGroup.add(mark);
+        }
+
+        // Anillo neón decorativo en la base del termómetro
+        const thermoBaseRing = new THREE.Mesh(
+            new THREE.TorusGeometry(0.15, 0.01, 8, 24),
+            new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.5 })
+        );
+        thermoBaseRing.rotation.x = Math.PI / 2;
+        thermoBaseRing.position.y = 0.0;
+        thermoGroup.add(thermoBaseRing);
+
+        // Posicionar al lado izquierdo del invernadero
+        thermoGroup.position.set(-2.8, 0.2, 1.5);
+        physicalGroup.add(thermoGroup);
+
+        // Variable para interpolación suave de la temperatura visual
+        let thermoDisplayTemp = 27;
+        const TEMP_MIN_RANGE = 0;
+        const TEMP_MAX_RANGE = 50;
+
         const sensorPost = new THREE.Mesh(
 
             new THREE.CylinderGeometry(0.06, 0.06, 1.2, 8),
@@ -1475,6 +1640,72 @@
 
 
 
+
+            /* ==============================
+               MINI VENTILADOR — Capa Física: rotación suave
+            ============================== */
+            const phyAireOn = !!backendDevices.aire;
+            // Suavizar arranque/parada del ventilador
+            const targetSpeed = phyAireOn ? 14.0 : 0.0;
+            phyFanSpeed += (targetSpeed - phyFanSpeed) * Math.min(1, dt * 3.0);
+            if (phyFanSpeed > 0.05) {
+                phyFanBlades.rotation.z += phyFanSpeed * dt;
+            }
+            // Pulso neón del anillo cuando está activo
+            if (phyAireOn) {
+                phyFanRing.material.opacity = 0.5 + 0.3 * Math.sin(elapsed * 6);
+                phyFanRing.material.color.setHex(0x2ecc71);
+            } else {
+                phyFanRing.material.opacity = 0.15;
+                phyFanRing.material.color.setHex(0x37474f);
+            }
+
+            /* ==============================
+               TERMÓMETRO 3D — Capa Física: lerp + color dinámico
+            ============================== */
+            {
+                // Determinar la temperatura objetivo
+                const targetTemp = (simModeSelect.value === 'sim')
+                    ? sim.temp_c
+                    : (typeof backendDevices.temperatura_c === 'number'
+                        ? backendDevices.temperatura_c : 27);
+
+                // Lerp suave hacia la temperatura objetivo
+                thermoDisplayTemp += (targetTemp - thermoDisplayTemp) * Math.min(1, dt * 2.0);
+
+                // Normalizar la temperatura al rango visual (0..1)
+                const tNorm = Math.max(0, Math.min(1,
+                    (thermoDisplayTemp - TEMP_MIN_RANGE) / (TEMP_MAX_RANGE - TEMP_MIN_RANGE)
+                ));
+
+                // Calcular la altura de la barra de mercurio
+                const mercuryMaxH = THERMO_HEIGHT - 0.3;
+                const mercuryH = Math.max(0.02, tNorm * mercuryMaxH);
+
+                // Actualizar la geometría del mercurio
+                mercuryBar.geometry.dispose();
+                mercuryBar.geometry = new THREE.CylinderGeometry(
+                    MERCURY_RADIUS, MERCURY_RADIUS, mercuryH, 12
+                );
+                mercuryBar.position.y = 0.1 + mercuryH / 2;
+
+                // Color dinámico: Azul frío (0x00bcd4) → Naranja caliente (0xff6600)
+                const coldColor = new THREE.Color(0x00bcd4);
+                const hotColor = new THREE.Color(0xff6600);
+                const currentColor = coldColor.clone().lerp(hotColor, tNorm);
+
+                mercuryMat.color.copy(currentColor);
+                mercuryMat.emissive.copy(currentColor);
+                mercuryMat.emissiveIntensity = 0.4 + tNorm * 0.4;
+
+                // También colorear el bulbo
+                thermoBulb.material.color.copy(currentColor);
+                thermoBulb.material.emissive.copy(currentColor);
+                thermoBulb.material.emissiveIntensity = 0.3 + tNorm * 0.5;
+
+                // Pulso sutil del anillo base
+                thermoBaseRing.material.opacity = 0.3 + 0.2 * Math.sin(elapsed * 3);
+            }
 
             /* Tween de cámara */
             updateCameraTween(dt);
