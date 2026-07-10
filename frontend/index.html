@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Capas IoT - Invernadero Inteligente</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <style>
         :root {
@@ -15,11 +17,17 @@
             --application: #ff9800;
             --bg: #070b07;
             --card: rgba(12, 20, 12, 0.75);
-            --border: rgba(255,255,255,0.07);
+            --border: rgba(255, 255, 255, 0.07);
             --fg: #e8efe8;
             --muted: #7a8a7a;
         }
-        * { margin:0; padding:0; box-sizing:border-box; }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
             font-family: 'Space Grotesk', sans-serif;
             background: var(--bg);
@@ -28,48 +36,68 @@
             height: 100vh;
             width: 100vw;
         }
+
         #canvas-container {
             position: fixed;
             inset: 0;
             z-index: 0;
         }
-        #canvas-container canvas { display: block; }
+
+        #canvas-container canvas {
+            display: block;
+        }
+
         .vignette {
             position: fixed;
             inset: 0;
             pointer-events: none;
             z-index: 1;
-            background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.6) 100%);
+            background: radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, 0.6) 100%);
         }
 
         /* Header */
         .top-bar {
             position: fixed;
-            top: 0; left: 0; right: 0;
+            top: 0;
+            left: 0;
+            right: 0;
             z-index: 10;
             padding: 16px 24px;
             display: flex;
             align-items: center;
             gap: 12px;
-            background: linear-gradient(to bottom, rgba(7,11,7,0.9) 0%, transparent 100%);
+            background: linear-gradient(to bottom, rgba(7, 11, 7, 0.9) 0%, transparent 100%);
             pointer-events: none;
         }
+
         .top-bar .dot {
-            width: 10px; height: 10px;
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
             background: var(--physical);
             box-shadow: 0 0 8px var(--physical);
             animation: pulse-dot 2s ease-in-out infinite;
         }
+
         @keyframes pulse-dot {
-            0%,100% { opacity: 0.6; transform: scale(1); }
-            50% { opacity: 1; transform: scale(1.3); }
+
+            0%,
+            100% {
+                opacity: 0.6;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 1;
+                transform: scale(1.3);
+            }
         }
 
         /* Info Panel */
         .info-panel {
             position: fixed;
-            top: 70px; right: 20px;
+            top: 70px;
+            right: 20px;
             width: 360px;
             max-height: calc(100vh - 160px);
             z-index: 10;
@@ -82,11 +110,13 @@
             transition: opacity 0.4s, transform 0.4s;
             overflow-y: auto;
         }
+
         .info-panel.hidden {
             opacity: 0;
             transform: translateX(30px);
             pointer-events: none;
         }
+
         .info-panel .layer-badge {
             display: inline-flex;
             align-items: center;
@@ -99,24 +129,28 @@
             text-transform: uppercase;
             margin-bottom: 16px;
         }
+
         .info-panel h2 {
             font-size: 24px;
             font-weight: 700;
             margin-bottom: 12px;
             line-height: 1.2;
         }
+
         .info-panel p {
             font-size: 14.5px;
             line-height: 1.7;
             color: var(--muted);
             margin-bottom: 20px;
         }
+
         .info-panel .elements-list {
             list-style: none;
             display: flex;
             flex-direction: column;
             gap: 10px;
         }
+
         .info-panel .elements-list li {
             display: flex;
             align-items: flex-start;
@@ -125,6 +159,7 @@
             color: #b0c0b0;
             line-height: 1.5;
         }
+
         .info-panel .elements-list li i {
             margin-top: 3px;
             font-size: 11px;
@@ -147,6 +182,7 @@
             border: 1px solid var(--border);
             border-radius: 16px;
         }
+
         .nav-btn {
             display: flex;
             flex-direction: column;
@@ -164,12 +200,29 @@
             transition: all 0.3s;
             white-space: nowrap;
         }
-        .nav-btn i { font-size: 16px; transition: color 0.3s, transform 0.3s; }
-        .nav-btn:hover { color: var(--fg); background: rgba(255,255,255,0.04); }
-        .nav-btn:hover i { transform: scale(1.15); }
-        .nav-btn.active { color: var(--fg); background: rgba(255,255,255,0.08); }
+
+        .nav-btn i {
+            font-size: 16px;
+            transition: color 0.3s, transform 0.3s;
+        }
+
+        .nav-btn:hover {
+            color: var(--fg);
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .nav-btn:hover i {
+            transform: scale(1.15);
+        }
+
+        .nav-btn.active {
+            color: var(--fg);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
         .nav-btn .indicator {
-            width: 4px; height: 4px;
+            width: 4px;
+            height: 4px;
             border-radius: 50%;
             background: transparent;
             transition: background 0.3s;
@@ -190,15 +243,26 @@
             gap: 20px;
             transition: opacity 0.8s;
         }
-        .loading-screen.fade-out { opacity: 0; pointer-events: none; }
+
+        .loading-screen.fade-out {
+            opacity: 0;
+            pointer-events: none;
+        }
+
         .loader {
-            width: 40px; height: 40px;
-            border: 3px solid rgba(46,204,113,0.15);
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(46, 204, 113, 0.15);
             border-top-color: var(--physical);
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
 
         /* Responsive */
         @media (max-width: 768px) {
@@ -210,14 +274,30 @@
                 max-height: 35vh;
                 padding: 20px 18px;
             }
-            .nav-btn { padding: 8px 10px; font-size: 10px; }
-            .nav-btn i { font-size: 14px; }
+
+            .nav-btn {
+                padding: 8px 10px;
+                font-size: 10px;
+            }
+
+            .nav-btn i {
+                font-size: 14px;
+            }
         }
 
         /* Scrollbar */
-        .info-panel::-webkit-scrollbar { width: 4px; }
-        .info-panel::-webkit-scrollbar-track { background: transparent; }
-        .info-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+        .info-panel::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .info-panel::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .info-panel::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+        }
     </style>
     <script type="importmap">
     {
@@ -228,6 +308,7 @@
     }
     </script>
 </head>
+
 <body>
 
     <!-- Pantalla de carga -->
@@ -362,11 +443,11 @@
            CONFIGURACIÓN DE CÁMARA POR CAPA
         ============================== */
         const cameraViews = {
-            overview:     { pos: [26, 13, 26], target: [0, 11, 0] },
-            physical:     { pos: [13, 2.5, 13], target: [0, 1.8, 0] },
+            overview: { pos: [26, 13, 26], target: [0, 11, 0] },
+            physical: { pos: [13, 2.5, 13], target: [0, 1.8, 0] },
             connectivity: { pos: [12, 8.5, 12], target: [0, 8, 0] },
-            platform:     { pos: [14, 15, 14], target: [0, 14.5, 0] },
-            application:  { pos: [12, 21.5, 12], target: [0, 21, 0] },
+            platform: { pos: [14, 15, 14], target: [0, 14.5, 0] },
+            application: { pos: [12, 21.5, 12], target: [0, 21, 0] },
         };
 
         /* ==============================
@@ -541,12 +622,12 @@
         roofLines.rotation.y = Math.PI / 4;
         physicalGroup.add(roofLines);
 
-       /* Sensor de temperatura */
+        /* Sensor de temperatura */
         const sensorGroup = new THREE.Group();
 
         // Elementos visuales de Etapa 1 (termómetro/humedad)
         const tempText = createLabel('TEMP: --°C', '#ffab00', 0.7);
-        tempText.position.set(-2.25, 3.8, 0);
+        tempText.position.set(-2.8, 0.35, 2.15);
         physicalGroup.add(tempText);
 
         const humidityTextMesh = createLabel('HUM: --%', '#00e676', 0.7);
@@ -670,7 +751,8 @@
         phyFanGroup.add(phyFanBase);
 
         // Posicionar el ventilador dentro del invernadero (lado derecho)
-        phyFanGroup.position.set(2.8, 1.4, 1.5);
+        // y = 0.66 para que la base (y=-0.66 dentro del grupo) toque el piso (y=0)
+        phyFanGroup.position.set(2.8, 0.80, 1.5);
         physicalGroup.add(phyFanGroup);
 
         // Variable de velocidad actual para suavizar arranque/parada
@@ -1379,101 +1461,101 @@
         // Este motor SOLO se activa si simModeSelect.value === 'sim'.
         // Cuando está en Backend, se siguen mostrando los valores desde Supabase.
         let sim = {
-          enabled: false,
-          // hora inicial (se toma del backendAutomation.horaVirtual si existe)
-          minutesOfDay: 18 * 60 + 45,
-          lastRealMs: Date.now(),
-          temp_c: 27,
-          hum_pct: 68,
-          riego: false,
-          // configuración simple (se puede ajustar)
-          tempMin: 14,
-          tempMax: 38,
-          humMin: 45,
-          humMax: 85,
-          // umbrales de riego
-          humRiegoOnBelow: 50,
-          humRiegoOffAbove: 60,
+            enabled: false,
+            // hora inicial (se toma del backendAutomation.horaVirtual si existe)
+            minutesOfDay: 18 * 60 + 45,
+            lastRealMs: Date.now(),
+            temp_c: 27,
+            hum_pct: 68,
+            riego: false,
+            // configuración simple (se puede ajustar)
+            tempMin: 14,
+            tempMax: 38,
+            humMin: 45,
+            humMax: 85,
+            // umbrales de riego
+            humRiegoOnBelow: 50,
+            humRiegoOffAbove: 60,
         };
 
         function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
 
         function minutesToHHMM(mins) {
-          const m = ((mins % (24 * 60)) + (24 * 60)) % (24 * 60);
-          const hh = String(Math.floor(m / 60)).padStart(2, '0');
-          const mm = String(m % 60).padStart(2, '0');
-          return `${hh}:${mm}`;
+            const m = ((mins % (24 * 60)) + (24 * 60)) % (24 * 60);
+            const hh = String(Math.floor(m / 60)).padStart(2, '0');
+            const mm = String(m % 60).padStart(2, '0');
+            return `${hh}:${mm}`;
         }
 
-          // Curva día/noche (más realista): sol máximo alrededor de 13:00
+        // Curva día/noche (más realista): sol máximo alrededor de 13:00
         // Devuelve factor 0..1.
         function solarFactor(minutes) {
-          // Queremos proporcionalidad continua y que al volver de 24h a 0
-          // la TEMP arranque a subir gradualmente.
-          // Definimos un ciclo diario sinusoidal centrado alrededor de las 13:00.
-          // f=0 fuera de “ventana solar” y f~1 cerca del pico.
-          const dayMinutes = 24 * 60;
-          const m = ((minutes % dayMinutes) + dayMinutes) % dayMinutes; // 0..1440
+            // Queremos proporcionalidad continua y que al volver de 24h a 0
+            // la TEMP arranque a subir gradualmente.
+            // Definimos un ciclo diario sinusoidal centrado alrededor de las 13:00.
+            // f=0 fuera de “ventana solar” y f~1 cerca del pico.
+            const dayMinutes = 24 * 60;
+            const m = ((minutes % dayMinutes) + dayMinutes) % dayMinutes; // 0..1440
 
-          // Pico de radiación (13:00)
-          const peak = 13 * 60;
-          const halfWindow = 6 * 60; // ventana ~6h a cada lado del pico => 7:00..19:00 aprox
+            // Pico de radiación (13:00)
+            const peak = 13 * 60;
+            const halfWindow = 6 * 60; // ventana ~6h a cada lado del pico => 7:00..19:00 aprox
 
-          // Normalizamos el ángulo para obtener una campana suave (sinusoidal)
-          const dist = Math.abs(m - peak);
-          const distWrap = Math.min(dist, dayMinutes - dist); // distancia sobre el wrap
+            // Normalizamos el ángulo para obtener una campana suave (sinusoidal)
+            const dist = Math.abs(m - peak);
+            const distWrap = Math.min(dist, dayMinutes - dist); // distancia sobre el wrap
 
-          if (distWrap >= halfWindow) return 0;
+            if (distWrap >= halfWindow) return 0;
 
-          // distWrap=0 => 1; distWrap=halfWindow => 0
-          const t = 1 - (distWrap / halfWindow); // 0..1
-          // Campana suave: sin(pi/2 * t) mantiene continuidad
-          return Math.max(0, Math.min(1, Math.sin((Math.PI / 2) * t)));
+            // distWrap=0 => 1; distWrap=halfWindow => 0
+            const t = 1 - (distWrap / halfWindow); // 0..1
+            // Campana suave: sin(pi/2 * t) mantiene continuidad
+            return Math.max(0, Math.min(1, Math.sin((Math.PI / 2) * t)));
         }
 
 
         // Temperatura ambiente (depende del factor solar) con offset diurno.
         // Esto evita que el sistema quede “pegado” cerca de humRiegoOnBelow o extremos.
         function tempFromSolarFactor(f) {
-          // Si f=0 => 14°C, si f=1 => 38°C (proporcional)
-          return sim.tempMin + (sim.tempMax - sim.tempMin) * f;
+            // Si f=0 => 14°C, si f=1 => 38°C (proporcional)
+            return sim.tempMin + (sim.tempMax - sim.tempMin) * f;
         }
 
         function humFromSolarFactor(f) {
-          // Si hace calor (f alta) => humedad baja
-          return sim.humMax - (sim.humMax - sim.humMin) * f;
+            // Si hace calor (f alta) => humedad baja
+            return sim.humMax - (sim.humMax - sim.humMin) * f;
         }
 
 
         function updateLocalClimate(dtSeconds) {
-          // dtSeconds en “tiempo real”; multiplicamos por factor de velocidad
-          const speedFactor = (() => {
-            const v = Number(simSpeedSelect.value);
-            if (!v) return 1; // real time
-            return v;
-          })();
+            // dtSeconds en “tiempo real”; multiplicamos por factor de velocidad
+            const speedFactor = (() => {
+                const v = Number(simSpeedSelect.value);
+                if (!v) return 1; // real time
+                return v;
+            })();
 
-          sim.minutesOfDay += (dtSeconds * 60) * speedFactor; // 1s real => 1 min simulada * speed
+            sim.minutesOfDay += (dtSeconds * 60) * speedFactor; // 1s real => 1 min simulada * speed
 
-          const f = solarFactor(sim.minutesOfDay); // 0..1
+            const f = solarFactor(sim.minutesOfDay); // 0..1
 
-          // TEMP sube con el sol
-          const targetTemp = sim.tempMin + (sim.tempMax - sim.tempMin) * f;
-          // HUM es inversa (cuando más calor/sol, menos humedad)
-          const targetHum = sim.humMax - (sim.humMax - sim.humMin) * f;
+            // TEMP sube con el sol
+            const targetTemp = sim.tempMin + (sim.tempMax - sim.tempMin) * f;
+            // HUM es inversa (cuando más calor/sol, menos humedad)
+            const targetHum = sim.humMax - (sim.humMax - sim.humMin) * f;
 
-          // suavizado para que sea “agradable” visualmente
-          // (subimos k para que sea mucho más evidente en pantalla)
-          const k = 1 - Math.exp(-dtSeconds * 2.2);
-          sim.temp_c = sim.temp_c + (targetTemp - sim.temp_c) * k;
-          sim.hum_pct = sim.hum_pct + (targetHum - sim.hum_pct) * k;
+            // suavizado para que sea “agradable” visualmente
+            // (subimos k para que sea mucho más evidente en pantalla)
+            const k = 1 - Math.exp(-dtSeconds * 2.2);
+            sim.temp_c = sim.temp_c + (targetTemp - sim.temp_c) * k;
+            sim.hum_pct = sim.hum_pct + (targetHum - sim.hum_pct) * k;
 
-          // riego por umbrales (histeresis)
-          if (!sim.riego && sim.hum_pct < sim.humRiegoOnBelow) sim.riego = true;
-          if (sim.riego && sim.hum_pct > sim.humRiegoOffAbove) sim.riego = false;
+            // riego por umbrales (histeresis)
+            if (!sim.riego && sim.hum_pct < sim.humRiegoOnBelow) sim.riego = true;
+            if (sim.riego && sim.hum_pct > sim.humRiegoOffAbove) sim.riego = false;
 
-          // hora visible (UI) en UI
-          simClockText.textContent = `Hora: ${minutesToHHMM(sim.minutesOfDay)}`;
+            // hora visible (UI) en UI
+            simClockText.textContent = `Hora: ${minutesToHHMM(sim.minutesOfDay)}`;
         }
 
         async function obtenerEstado() {
@@ -1481,7 +1563,7 @@
                 const response = await fetch(`https://proyecto-iot-mocha.vercel.app/api/state/${CHAT_ID}`, { cache: 'no-store' });
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const data = await response.json();
-            if (data?.devices) {
+                if (data?.devices) {
                     backendDevices = {
                         luz: !!data.devices.luz,
                         aire: !!data.devices.aire,
@@ -1826,4 +1908,5 @@
 
     </script>
 </body>
+
 </html>
