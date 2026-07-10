@@ -78,12 +78,23 @@ function applyClimateRules(currentState, actuators) {
   // sea drástico visualmente. Se clampea a 0.95 para no perder la sensación "suave".
   const timeScale = typeof state.timeScale === 'number' && state.timeScale > 0 ? state.timeScale : 1;
   const alpha = Math.min(0.95, 0.35 * timeScale);
-  const temp = prevTemp + (tempTarget - prevTemp) * alpha;
-  const hum = prevHum + (humTarget - prevHum) * alpha;
+  // --- LOGICA ORIGINAL DE ACERCAMIENTO SUAVE ---
+  let temp = prevTemp + (tempTarget - prevTemp) * alpha;
+  let hum = prevHum + (humTarget - prevHum) * alpha;
 
-  // clamp
-  state.temperatura_c = Math.max(0, Math.min(60, temp));
-  state.humedad_pct = Math.max(0, Math.min(100, hum));
+  // 🔥 --- TU MODIFICACIÓN MANUAL: DRIFT ACELERADO POR TIME SCALE ---
+  // Definimos cuánto cambia el clima de forma natural por cada ciclo (en x1)
+  const driftTemperatura = 0.20; // Sube 0.20°C por tick base
+  const driftHumedad = 0.30;     // Baja 0.30% de humedad por tick base
+
+  // Forzamos el subidón multiplicando por la escala de tiempo (x1, x2, x5, x10)
+  temp += driftTemperatura * timeScale;
+  hum -= driftHumedad * timeScale;
+  // -----------------------------------------------------------------
+
+  // LÍMITES LÓGICOS (Clamp) para que no rompa la escala del invernadero
+  state.temperatura_c = Math.max(14, Math.min(45, temp)); // Tope de 45°C
+  state.humedad_pct = Math.max(20, Math.min(95, hum));    // Mínimo 20% de humedad
 
   return state;
 }
