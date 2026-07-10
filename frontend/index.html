@@ -1596,6 +1596,48 @@
         obtenerEstado();
         setInterval(obtenerEstado, 2000);
 
+        // Empuja ticks al cron cada 5s SOLO en modo Backend (Supabase).
+        // Sin esto, el cron queda dormido entre las ejecuciones automáticas
+        // de Vercel y la maqueta muestra valores estáticos.
+        // En modo 'sim' el frontend usa su propio motor local, no toca el cron.
+        async function pingCronInvernadero() {
+            try {
+                const response = await fetch(
+                    'https://proyecto-iot-mocha.vercel.app/api/cron/invernadero',
+                    { cache: 'no-store' }
+                );
+                if (!response.ok) return;
+                const payload = await response.json().catch(() => null);
+                if (payload && payload.updated === 1 && typeof payload.temperatura_c === 'number') {
+                    // Optimistic UI: refleja inmediatamente el nuevo valor en el HUD
+                    // mientras llega la siguiente lectura de /api/state (cada 2s).
+                    backendDevices.temperatura_c = payload.temperatura_c;
+                    backendDevices.humedad_pct = payload.humedad_pct;
+                    if (debugHud) renderHud();
+                }
+            } catch (e) {
+                // silencioso: el cron puede no responder momentáneamente
+            }
+        }
+
+        function startCronPingerIfBackend() {
+            const isBackend = simModeSelect.value === 'backend';
+            if (isBackend) {
+                pingCronInvernadero();
+                if (!window.__cronPinger) {
+                    window.__cronPinger = setInterval(pingCronInvernadero, 5000);
+                }
+            } else {
+                if (window.__cronPinger) {
+                    clearInterval(window.__cronPinger);
+                    window.__cronPinger = null;
+                }
+            }
+        }
+        // Inicial y al cambiar el modo
+        startCronPingerIfBackend();
+        simModeSelect.addEventListener('change', startCronPingerIfBackend);
+
         function actualizarAccionVisual(devices) {
             // Luz: en esta maqueta simulamos el encendido/apagado apagando intensidades de luces “físicas y aplicación”.
             const luzOn = !!devices.luz;
