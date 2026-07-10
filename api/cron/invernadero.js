@@ -49,6 +49,9 @@ function applyClimateRules(currentState, actuators) {
   const horaVirtual = typeof state.horaVirtual === 'string' ? state.horaVirtual : (state.horaVirtual || state.horaVirtual);
   const solarFactor = computeSolarFactorFromHora(horaVirtual);
 
+  // Factor de escala temporal (x1, x2, x5, x10). Por defecto x1.
+  const timeScale = typeof state.timeScale === 'number' && state.timeScale > 0 ? state.timeScale : 1;
+
   // 1) Temperatura base por hora
   // Elegimos el mismo rango aproximado del frontend sim
   const TEMP_MIN = 14;
@@ -56,7 +59,6 @@ function applyClimateRules(currentState, actuators) {
   let tempTarget = TEMP_MIN + (TEMP_MAX - TEMP_MIN) * solarFactor;
 
   // 2) Correcciones por actuadores (estado del invernadero)
-  // Aire enfría, riego/humedad afecta ligeramente, luz fuera de “solar” aporta poco
   if (aire) tempTarget -= 2.5;
   if (luz) tempTarget += 0.5; // aunque el sol ya existe, luz suma un poco
 
@@ -68,29 +70,40 @@ function applyClimateRules(currentState, actuators) {
   if (riego) humTarget += 8;
   if (aire) humTarget -= 1.5; // aire tiende a bajar algo humedad
 
-  // 4) Para que sea “suave”, hacemos acercamiento incremental vs set directo
+  // 4) Acercamiento incremental al target (sensación "suave" en x1)
   const prevTemp = typeof state.temperatura_c === 'number' ? state.temperatura_c : 27;
   const prevHum = typeof state.humedad_pct === 'number' ? state.humedad_pct : 68;
 
-  // FIX: alpha escala con timeScale. Sin esto, en x10 el clima se siente igual que en x1
-  // porque el cron sigue moviéndose solo alpha por tick. Con alpha*ts, a x10 el clima
-  // se acerca mucho más rápido al target por minuto virtual, haciendo que el cambio
-  // sea drástico visualmente. Se clampea a 0.95 para no perder la sensación "suave".
-  const timeScale = typeof state.timeScale === 'number' && state.timeScale > 0 ? state.timeScale : 1;
+  // alpha escala con timeScale para que el acercamiento se note más rápido en x10.
   const alpha = Math.min(0.95, 0.35 * timeScale);
-  // --- LOGICA ORIGINAL DE ACERCAMIENTO SUAVE ---
   let temp = prevTemp + (tempTarget - prevTemp) * alpha;
   let hum = prevHum + (humTarget - prevHum) * alpha;
 
-  // 🔥 --- TU MODIFICACIÓN MANUAL: DRIFT ACELERADO POR TIME SCALE ---
-  // Definimos cuánto cambia el clima de forma natural por cada ciclo (en x1)
-  const driftTemperatura = 0.20; // Sube 0.20°C por tick base
-  const driftHumedad = 0.30;     // Baja 0.30% de humedad por tick base
+  // 🌡️ 5) DRIFT DINÁMICO afectado por los actuadores y escalado por timeScale.
+  //
+  // - El calor se acumula con el tiempo (drift positivo).
+  // - El ventilador (aire) enfría: REVIERTE el drift de temperatura.
+  // - El suelo se seca con el tiempo (drift negativo de humedad).
+  // - El riego (riego) hidrata: REVIERTE el drift de humedad.
+  //
+  // Valores base por tick (x1) — se multiplican por timeScale para que el efecto
+  // se sienta en segundos cuando el reloj va a x10.
+  const baseTempDriftPerTick = 0.20; // °C que sube por tick en x1 sin ventilador
+  const baseHumDriftPerTick = 0.30;  // % que baja por tick en x1 sin riego
 
-  // Forzamos el subidón multiplicando por la escala de tiempo (x1, x2, x5, x10)
-  temp += driftTemperatura * timeScale;
-  hum -= driftHumedad * timeScale;
-  // -----------------------------------------------------------------
+  // Temperatura: si aire está ON, el drift de calor se cancela (e incluso enfría).
+  // Si aire está OFF, el calor se acumula.
+  const tempDriftSign = aire ? -1 : 1;
+  const tempDriftEffect = baseTempDriftPerTick * tempDriftSign * timeScale;
+
+  // Humedad: si riego está ON, el suelo se hidrata (drift invertido, sube fuerte).
+  // Si riego está OFF, el suelo se seca (drift baja).
+  const humDriftSign = riego ? -1 : 1; // -1 invierte el "secar" en "humedecer"
+  const humDriftEffect = baseHumDriftPerTick * humDriftSign * timeScale;
+
+  // Aplicamos el drift al estado actual.
+  temp += tempDriftEffect;
+  hum += humDriftEffect;
 
   // LÍMITES LÓGICOS (Clamp) para que no rompa la escala del invernadero
   state.temperatura_c = Math.max(14, Math.min(45, temp)); // Tope de 45°C
@@ -103,31 +116,41 @@ function applyClimateRules(currentState, actuators) {
 // Cron tick: por simplicidad actualiza todos los device_states (o solo uno si prefieres)
 export default async function handler(req, res) {
   try {
-    // Identificador del chat para demo; si no viene, actualizamos todos los registros.
-    const chatIdQuery = req?.query?.chatId;
+    // 🔒 ID unificado del proyecto. Ignoramos cualquier chatId dinámico que venga
+    // por query string: el sistema completo (frontend, bot de Telegram y cron)
+    // opera sobre un único registro fijo en Supabase.
+    const FIXED_CHAT_ID = '123456789';
 
     const supabase = getSupabaseClient();
 
-    // Leer todos los device_states (o uno) con estado actual
-    let rows = [];
-    if (chatIdQuery) {
-      const { data, error } = await supabase
-        .from('device_states')
-        .select('chat_id, state, last_action')
-        .eq('chat_id', chatIdQuery)
-        .maybeSingle();
-      if (error) throw error;
-      if (data) rows = [data];
-    } else {
-      const { data, error } = await supabase
-        .from('device_states')
-        .select('chat_id, state, last_action');
-      if (error) throw error;
-      rows = Array.isArray(data) ? data : [];
-    }
+    // Leemos DIRECTAMENTE el registro fijo del chat_id '123456789'.
+    // No usamos chatIdQuery ni hacemos fallback a "todos los registros" porque
+    // unificamos el proyecto bajo un único ID estático.
+    const { data, error } = await supabase
+      .from('device_states')
+      .select('chat_id, state, last_action')
+      .eq('chat_id', FIXED_CHAT_ID)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    const rows = data ? [data] : [];
 
     if (!rows.length) {
-      return res.status(200).json({ ok: true, updated: 0, note: 'No device_states found' });
+      // Si por algún motivo el registro fijo aún no existe, lo creamos al vuelo
+      // con el estado por defecto. Esto evita que el cron devuelva "updated: 0"
+      // y garantiza que la primera ejecución del proyecto ya tenga su fila.
+      await ensureDeviceState(supabase, FIXED_CHAT_ID);
+      const { data: seeded, error: seedError } = await supabase
+        .from('device_states')
+        .select('chat_id, state, last_action')
+        .eq('chat_id', FIXED_CHAT_ID)
+        .maybeSingle();
+      if (seedError) throw seedError;
+      if (!seeded) {
+        return res.status(200).json({ ok: true, updated: 0, note: 'No device_states found' });
+      }
+      rows.push(seeded);
     }
 
     let updated = 0;
